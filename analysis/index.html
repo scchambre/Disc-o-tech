@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Disc-o-tech · flight analyzer</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.5 system-ui, sans-serif; background: #0b0e13; color: #d7dee7; }
+  header { padding: 18px 22px; border-bottom: 1px solid #1c232c; }
+  h1 { margin: 0; font-size: 18px; } h1 small { color: #6b7886; font-weight: 400; }
+  main { max-width: 1000px; margin: 0 auto; padding: 18px 22px 60px; }
+  .cards { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .card { background: #11161d; border: 1px solid #1c232c; border-radius: 10px; padding: 14px; }
+  .card h2 { margin: 0 0 8px; font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: #8a97a5; }
+  #drop { border: 1.5px dashed #2c3744; border-radius: 8px; padding: 18px; text-align: center; color: #8a97a5; cursor: pointer; }
+  #drop.over { border-color: #4fa3ff; color: #4fa3ff; }
+  button { background: #1b2531; color: #d7dee7; border: 1px solid #2c3744; border-radius: 7px; padding: 8px 12px; cursor: pointer; font: inherit; }
+  button:hover { border-color: #4fa3ff; }
+  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  table { width: 100%; border-collapse: collapse; margin-top: 14px; font-variant-numeric: tabular-nums; }
+  th, td { text-align: right; padding: 6px 8px; border-bottom: 1px solid #1c232c; }
+  th:first-child, td:first-child { text-align: left; }
+  th { color: #8a97a5; font-weight: 600; font-size: 12px; }
+  tr.pick:hover td { background: #141b24; cursor: pointer; }
+  .warn { color: #e0b341; }
+  canvas { width: 100%; height: 200px; background: #0e1116; border-radius: 8px; margin-top: 12px; }
+  .muted { color: #6b7886; font-size: 12px; }
+  #plotTitle { font-size: 12px; color: #8a97a5; margin-top: 16px; min-height: 16px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Disc-o-tech <small>· disc-flight analyzer</small></h1>
+</header>
+<main>
+  <div class="cards">
+    <div class="card">
+      <h2>Load CSV</h2>
+      <div id="drop">Drop a <code>MY_DATA</code> CSV here, or click to choose<input id="file" type="file" accept=".csv,.txt" multiple hidden></div>
+      <p class="muted">From the micro:bit USB drive (<code>MY_DATA.HTM</code> → Download), or saved live captures.</p>
+    </div>
+    <div class="card">
+      <h2>Live (base station)</h2>
+      <div class="row"><button id="connect">Connect base station</button></div>
+      <p class="muted">Plug the receiver micro:bit into USB. Chrome/Edge only (Web Serial). Each throw appears automatically.</p>
+    </div>
+  </div>
+
+  <div class="row" style="margin-top:16px">
+    <strong>Throws: <span id="count">0</span></strong>
+    <span style="flex:1"></span>
+    <button id="export">Export table CSV</button>
+    <button id="clear">Clear</button>
+  </div>
+
+  <table>
+    <thead><tr>
+      <th>throw</th><th>RPM</th><th>tilt °</th><th>tilt dir °</th><th>peak g</th>
+      <th>spin&nbsp;wobble&nbsp;%</th><th>rate Hz</th><th>⚠</th>
+    </tr></thead>
+    <tbody id="rows"></tbody>
+  </table>
+
+  <div id="plotTitle"></div>
+  <canvas id="accCanvas" width="940" height="200"></canvas>
+  <canvas id="magCanvas" width="940" height="200"></canvas>
+  <p class="muted">Click a row to plot it. <b>tilt</b> = disc-axis lean at release (hyzer+nose combined, disc-frame).
+     <b>wobble</b> = spin-rate variability (lower = cleaner release). RPM needs sample rate ≳ 2× spin frequency.</p>
+</main>
+
+<script src="metrics.js"></script>
+<script src="plot.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

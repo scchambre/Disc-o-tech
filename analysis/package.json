@@ -1,0 +1,12 @@
+{
+  "name": "disc-o-tech-analysis",
+  "version": "0.1.0",
+  "description": "Disc golf flight analysis from micro:bit / IMU accelerometer + magnetometer data",
+  "private": true,
+  "bin": { "disc-o-tech": "cli.js" },
+  "scripts": {
+    "analyze": "node cli.js",
+    "demo": "node cli.js ../data/sample-throw.csv"
+  },
+  "license": "MIT"
+}

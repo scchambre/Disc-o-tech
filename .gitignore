@@ -1,0 +1,18 @@
+# dependencies / build
+node_modules/
+*.log
+
+# OS cruft
+.DS_Store
+Thumbs.db
+
+# editor
+.vscode/
+.idea/
+
+# captured throw data (keep the sample, ignore the rest)
+data/*.csv
+!data/sample-throw.csv
+
+# MakeCode build output
+*.hex
