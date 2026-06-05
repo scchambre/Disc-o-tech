@@ -7,10 +7,14 @@ Pure JavaScript, no build step. Same math runs in the browser and in Node.
 Open `index.html` (double-click, or serve the folder). Two ways to get data in:
 
 - **Load CSV** — drag a `MY_DATA` export (or any saved capture) onto the drop zone.
-- **Connect base station** — live serial from the receiver micro:bit. Each throw appears as a
-  new row automatically. *(Chrome/Edge only — Web Serial. If the button does nothing from
-  `file://`, serve the folder instead: `npx serve` or `python3 -m http.server`, then open the
-  printed `http://localhost…` URL.)*
+- **Connect via Bluetooth** — single-board build (`disc-microbit-bluetooth`). Pick
+  `BBC micro:bit [xxxxx]` from the picker; throws appear automatically. Web Bluetooth, Chrome/Edge.
+- **USB base station** — live serial from the 2-board radio receiver. Each throw appears
+  automatically. Web Serial, Chrome/Edge.
+
+*(If a live button does nothing from `file://`, serve the folder instead: `npx serve` or
+`python3 -m http.server`, then open the printed `http://localhost…` URL. Make sure system
+Bluetooth is on, and allow the browser's Bluetooth permission prompt.)*
 
 Click any row to plot that throw (acceleration + the magnetometer sine waves). The table is
 built for **comparing throws** — change your form, throw again, watch RPM / tilt / wobble

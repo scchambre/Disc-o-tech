@@ -68,6 +68,8 @@
   let port, reader, keepReading = false;
   let header = null, curLines = [], curMarker = null, capturing = false;
 
+  function resetStream() { header = null; curLines = []; curMarker = null; capturing = false; }
+
   function feedLine(line) {
     line = line.trim(); if (!line) return;
     if (line[0] === '#') {
@@ -93,6 +95,7 @@
     try {
       port = await navigator.serial.requestPort();
       await port.open({ baudRate: 115200 });
+      resetStream();
       $('connect').textContent = 'Disconnect';
       keepReading = true;
       const dec = new TextDecoderStream();
@@ -114,6 +117,44 @@
     $('connect').textContent = 'Connect base station';
   }
   $('connect').addEventListener('click', () => (keepReading ? disconnect() : connect()));
+
+  // ---------- Web Bluetooth (single-board build) ----------
+  const NUS = '6e400001-b5a3-f393-e0a9-e50e24dcca9e';      // micro:bit UART service
+  const NUS_TX = '6e400003-b5a3-f393-e0a9-e50e24dcca9e';   // micro:bit -> browser (notify)
+  let btDevice = null;
+
+  async function connectBluetooth() {
+    if (!navigator.bluetooth) {
+      alert('Web Bluetooth needs Chrome or Edge on desktop, with system Bluetooth turned on.'); return;
+    }
+    try {
+      const device = await navigator.bluetooth.requestDevice({
+        filters: [{ namePrefix: 'BBC micro:bit' }],
+        optionalServices: [NUS]
+      });
+      btDevice = device;
+      device.addEventListener('gattserverdisconnected', onBtDisconnect);
+      const server = await device.gatt.connect();
+      const ch = await (await server.getPrimaryService(NUS)).getCharacteristic(NUS_TX);
+      await ch.startNotifications();
+      resetStream();
+      const dec = new TextDecoder();
+      let buf = '';
+      ch.addEventListener('characteristicvaluechanged', e => {
+        buf += dec.decode(e.target.value);
+        let nl; while ((nl = buf.indexOf('\n')) >= 0) { feedLine(buf.slice(0, nl)); buf = buf.slice(nl + 1); }
+      });
+      $('connectBt').textContent = 'Disconnect Bluetooth';
+    } catch (e) {
+      console.error(e);
+      if (e.name !== 'NotFoundError') alert('Bluetooth error: ' + e.message);  // NotFoundError = user cancelled picker
+    }
+  }
+  function onBtDisconnect() { $('connectBt').textContent = 'Connect via Bluetooth'; btDevice = null; }
+  $('connectBt').addEventListener('click', () => {
+    if (btDevice && btDevice.gatt.connected) btDevice.gatt.disconnect();
+    else connectBluetooth();
+  });
 
   // ---------- export ----------
   $('export').addEventListener('click', () => {

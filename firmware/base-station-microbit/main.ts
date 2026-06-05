@@ -18,7 +18,6 @@
 
 radio.setGroup(7)
 serial.setBaudRate(BaudRate.BaudRate115200)
-let headerPrinted = false
 
 radio.onReceivedBuffer(function (buf: Buffer) {
     const tag = buf.getNumber(NumberFormat.Int16LE, 0)
@@ -29,10 +28,8 @@ radio.onReceivedBuffer(function (buf: Buffer) {
         const gry = buf.getNumber(NumberFormat.Int16LE, 8)
         const grz = buf.getNumber(NumberFormat.Int16LE, 10)
         serial.writeLine("# throw " + id + " gref=" + grx + "," + gry + "," + grz)
-        if (!headerPrinted) {
-            serial.writeLine("t,x,y,z,mx,my")
-            headerPrinted = true
-        }
+        // header every throw, so connecting the analyzer mid-session still parses
+        serial.writeLine("t,x,y,z,mx,my")
         basic.showLeds(`
             . . # . .
             . . # . .

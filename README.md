@@ -24,8 +24,9 @@ leaves the harness.
 
 | Path | What it is |
 |------|------------|
-| `firmware/disc-microbit/main.ts`         | Disc board: auto-detect → capture → radio dump |
-| `firmware/base-station-microbit/main.ts` | Receiver board: radio → CSV over USB serial |
+| `firmware/disc-microbit/main.ts`         | Disc board (2-board build): auto-detect → capture → radio dump |
+| `firmware/base-station-microbit/main.ts` | Receiver board (2-board build): radio → CSV over USB serial |
+| `firmware/disc-microbit-bluetooth/main.ts` | **Single-board build**: capture → Bluetooth UART → laptop |
 | `analysis/index.html`                    | Browser analyzer (drag-drop CSV **or** live serial) |
 | `analysis/metrics.js`                    | The flight-math engine (RPM, angle, wobble) |
 | `analysis/cli.js`                        | Same math from the terminal: `node cli.js file.csv` |
@@ -41,12 +42,18 @@ npm run demo          # analyzes data/sample-throw.csv  → ~480 RPM, 12° tilt
 
 Then open `analysis/index.html` in your browser and drag `data/sample-throw.csv` onto it.
 
-## Getting data off the micro:bit — two ways
+## Getting data off the micro:bit — three ways
 
-1. **USB (simplest):** plug the disc board in, open `MY_DATA.HTM` on the `MICROBIT` drive,
-   Download the CSV, drag it onto the analyzer. (Requires the datalogger-style firmware.)
-2. **Wireless (the loop above):** flash both boards, plug the base station into USB, click
-   **Connect base station** in the analyzer. Throws stream in automatically.
+1. **Bluetooth, ONE board (start here):** flash `disc-microbit-bluetooth` (see
+   `firmware/README.md` for the 3 MakeCode setup steps), open the analyzer, click **Connect
+   via Bluetooth**. No second board, no USB cable to the disc.
+2. **Radio, TWO boards (the loop above):** flash the disc + base-station builds, plug the base
+   station into USB, click **USB base station** in the analyzer. Throws stream in automatically.
+3. **USB datalogger (no live view):** plug the disc board in, open `MY_DATA.HTM` on the
+   `MICROBIT` drive, Download the CSV, drag it onto the analyzer.
+
+> With a single micro:bit, use option 1. Add a second board later for option 2 (longer range,
+> no Bluetooth fuss).
 
 ## What it measures — and the honest limits
 
