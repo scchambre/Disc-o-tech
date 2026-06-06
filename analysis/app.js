@@ -122,20 +122,29 @@
   const NUS = '6e400001-b5a3-f393-e0a9-e50e24dcca9e';      // micro:bit UART service
   const NUS_TX = '6e400003-b5a3-f393-e0a9-e50e24dcca9e';   // micro:bit -> browser (notify)
   let btDevice = null;
+  const btStatus = msg => { const el = $('btStatus'); if (el) el.textContent = msg; };
+  const withTimeout = (p, ms, label) => Promise.race([
+    p, new Promise((_, rej) => setTimeout(() => rej(new Error(label + ' timed out')), ms))
+  ]);
 
   async function connectBluetooth() {
     if (!navigator.bluetooth) {
       alert('Web Bluetooth needs Chrome or Edge on desktop, with system Bluetooth turned on.'); return;
     }
+    let device;
     try {
-      const device = await navigator.bluetooth.requestDevice({
-        filters: [{ namePrefix: 'BBC micro:bit' }],
+      device = await navigator.bluetooth.requestDevice({
+        acceptAllDevices: true,        // show everything; micro:bit name is hidden on macOS
         optionalServices: [NUS]
       });
-      btDevice = device;
+    } catch (e) { return; }            // user closed the picker — do nothing
+    const tag = device.name || device.id.slice(0, 10) + '…';
+    btStatus('⏳ Trying ' + tag + ' …');
+    try {
       device.addEventListener('gattserverdisconnected', onBtDisconnect);
-      const server = await device.gatt.connect();
-      const ch = await (await server.getPrimaryService(NUS)).getCharacteristic(NUS_TX);
+      const server = await withTimeout(device.gatt.connect(), 8000, 'Connect');
+      const service = await withTimeout(server.getPrimaryService(NUS), 6000, 'Service lookup');
+      const ch = await withTimeout(service.getCharacteristic(NUS_TX), 6000, 'Characteristic');
       await ch.startNotifications();
       resetStream();
       const dec = new TextDecoder();
@@ -144,13 +153,18 @@
         buf += dec.decode(e.target.value);
         let nl; while ((nl = buf.indexOf('\n')) >= 0) { feedLine(buf.slice(0, nl)); buf = buf.slice(nl + 1); }
       });
+      btDevice = device;
+      btStatus('✅ Connected — this is your micro:bit. Throw away! (device id ' + device.id.slice(0, 12) + '…)');
       $('connectBt').textContent = 'Disconnect Bluetooth';
     } catch (e) {
-      console.error(e);
-      if (e.name !== 'NotFoundError') alert('Bluetooth error: ' + e.message);  // NotFoundError = user cancelled picker
+      btStatus('❌ Not the micro:bit (' + e.message + '). Close & pick the next C/D/E/F device.');
+      try { device.gatt.disconnect(); } catch (_) { }
     }
   }
-  function onBtDisconnect() { $('connectBt').textContent = 'Connect via Bluetooth'; btDevice = null; }
+  function onBtDisconnect() {
+    $('connectBt').textContent = 'Connect via Bluetooth'; btDevice = null;
+    btStatus('Disconnected.');
+  }
   $('connectBt').addEventListener('click', () => {
     if (btDevice && btDevice.gatt.connected) btDevice.gatt.disconnect();
     else connectBluetooth();

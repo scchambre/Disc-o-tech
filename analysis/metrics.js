@@ -140,38 +140,41 @@
     }
     const peakG = peak / gScale;
 
-    // RPM from magnetometer phase, measured over the post-release (flight) region
+    // RPM from magnetometer phase, over the post-release (flight) region.
+    // Tolerate occasional dropped samples (e.g. Bluetooth packet loss) by using
+    // only the samples that actually have valid mx,my instead of all-or-nothing.
     let rpm = null, spinStabilityPct = null;
-    const haveMag = samples.every(s => s.mx != null && s.my != null);
-    if (!haveMag) {
-      warnings.push('No magnetometer (mx,my) columns — RPM unavailable.');
+    const segAll = samples.slice(releaseIdx);
+    const seg = segAll.filter(s => s.mx != null && s.my != null && !isNaN(s.mx) && !isNaN(s.my));
+    const droppedMag = segAll.length - seg.length;
+    if (seg.length < 8) {
+      warnings.push('Too few magnetometer samples for RPM (' + seg.length + ' usable' +
+        (droppedMag ? ', ' + droppedMag + ' missing — link dropping data' : '') + ').');
     } else {
-      const a = releaseIdx;
-      const seg = samples.slice(a);
-      if (seg.length >= 8) {
-        const secs = tms.slice(a).map(v => (v - tms[a]) / 1000);
-        const mxC = center(seg.map(s => s.mx));
-        const myC = center(seg.map(s => s.my));
-        if (Math.hypot(std(mxC), std(myC)) < 1e-6) {
-          warnings.push('Magnetometer signal too flat to read spin.');
-        } else {
-          const phase = unwrap(mxC.map((_, i) => Math.atan2(myC[i], mxC[i])));
-          const omega = Math.abs(linreg(secs, phase).slope);    // rad/s
-          rpm = omega * 60 / (2 * Math.PI);
-          const inst = [];
-          for (let i = 1; i < phase.length; i++) {
-            const dt = secs[i] - secs[i - 1];
-            if (dt > 0) inst.push(Math.abs((phase[i] - phase[i - 1]) / dt));
-          }
-          const m = mean(inst);
-          spinStabilityPct = m > 0 ? (std(inst) / m) * 100 : null;
-          if (sampleRateHz < 2.2 * (rpm / 60)) {
-            warnings.push('Sample rate ' + sampleRateHz.toFixed(0) + ' Hz too low for ' +
-              rpm.toFixed(0) + ' RPM — aliasing likely. Log faster or use an IMU with a gyro.');
-          }
-        }
+      if (droppedMag > segAll.length * 0.15) {
+        warnings.push(droppedMag + ' samples lost mag data (link drops) — RPM is approximate.');
+      }
+      const t0 = samples[releaseIdx].t;
+      const secs = seg.map(s => (s.t - t0) / 1000);
+      const mxC = center(seg.map(s => s.mx));
+      const myC = center(seg.map(s => s.my));
+      if (Math.hypot(std(mxC), std(myC)) < 1e-6) {
+        warnings.push('Magnetometer signal too flat to read spin (was it actually spinning?).');
       } else {
-        warnings.push('Not enough post-release samples to read spin.');
+        const phase = unwrap(mxC.map((_, i) => Math.atan2(myC[i], mxC[i])));
+        const omega = Math.abs(linreg(secs, phase).slope);    // rad/s
+        rpm = omega * 60 / (2 * Math.PI);
+        const inst = [];
+        for (let i = 1; i < phase.length; i++) {
+          const dt = secs[i] - secs[i - 1];
+          if (dt > 0) inst.push(Math.abs((phase[i] - phase[i - 1]) / dt));
+        }
+        const m = mean(inst);
+        spinStabilityPct = m > 0 ? (std(inst) / m) * 100 : null;
+        if (sampleRateHz < 2.2 * (rpm / 60)) {
+          warnings.push('Sample rate ' + sampleRateHz.toFixed(0) + ' Hz too low for ' +
+            rpm.toFixed(0) + ' RPM — aliasing likely. Use an IMU with a gyro for drives.');
+        }
       }
     }
 
