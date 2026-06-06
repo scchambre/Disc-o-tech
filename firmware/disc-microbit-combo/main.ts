@@ -1,38 +1,41 @@
-/* Disc-o-tech — SINGLE micro:bit, USB + BLUETOOTH at once (micro:bit V2)
+/* Disc-o-tech — SINGLE micro:bit, USB + BLUETOOTH, with PRE-ROLL (micro:bit V2)
  * ================================================================
- * Streams every throw over BOTH the USB cable (always) and Bluetooth (when a
- * browser is connected). So the cable is your guaranteed fallback while you
- * sort out the wireless link — no firmware switching.
+ * Continuously records into a rolling buffer, so when a throw is detected it
+ * already holds the previous ~5 seconds: your run-up, the x-step (where the
+ * disc sits nearly still), and the throw itself + early flight.
  *
- * The LED tells you the Bluetooth state:
- *   • two top corners lit  = Bluetooth NOT connected (USB still works)
- *   • single center dot    = Bluetooth connected
+ * Streams over BOTH USB (always) and Bluetooth (when a browser is connected).
+ * LED: two top corners = Bluetooth not connected; center dot = connected.
  *
- * ----- LOAD -----
- *  Use a project that has the "bluetooth" extension added AND
- *  Project Settings → "No Pairing Required" turned ON, then paste this in
- *  the { } JavaScript view and Download. (If you still have your earlier
- *  Bluetooth project, paste it there — it already has both.)
+ * No button needed for real throws — the acceleration spike auto-triggers.
+ * Button A just dumps the current buffer (handy for bench testing).
+ *
+ * LOAD: a project with the "bluetooth" extension + Project Settings →
+ * "No Pairing Required" ON. Paste in the { } JavaScript view → Download.
  */
 
 serial.setBaudRate(BaudRate.BaudRate115200)
 input.setAccelerometerRange(AcceleratorRange.EightG)
 bluetooth.startUartService()
 
-const MAX_SAMPLES = 200
-const CAPTURE_MS = 1500
-const TRIGGER_MG = 2600
-const STILL_MG = 1300
-const SAMPLE_PAUSE = 5
-const OUT_PAUSE = 30   // ms between Bluetooth lines. BLE is slow — too fast drops the
-                       // tail of each line (mx,my). 30ms is reliable; lower only if USB-only.
+// ---- tuning ----
+const RING = 250         // samples kept in the rolling buffer (~5 s at ~50 Hz). Raise for a longer run-up.
+const SAMPLE_PAUSE = 15  // ~50 Hz — plenty for run-up / x-step body motion
+const POST_MS = 1000     // keep recording this long AFTER the throw spike (flight)
+const TRIGGER_MG = 2600  // throw detection (~2.6 g). Lower toward 1800 for gentle tosses.
+const STILL_MG = 1300    // "still" threshold (gravity reference + re-arm)
+const OUT_PAUSE = 30     // ms between Bluetooth lines. BLE is slow — keep at 30 for reliable wireless.
 
-let bt: number[] = []
-let bx: number[] = []
-let by: number[] = []
-let bz: number[] = []
-let bmx: number[] = []
-let bmy: number[] = []
+// ---- rolling buffer (pre-allocated so we never allocate mid-throw) ----
+let rt: number[] = []
+let rx: number[] = []
+let ry: number[] = []
+let rz: number[] = []
+let rmx: number[] = []
+let rmy: number[] = []
+for (let i = 0; i < RING; i++) { rt.push(0); rx.push(0); ry.push(0); rz.push(0); rmx.push(0); rmy.push(0) }
+let widx = 0
+let filled = 0
 
 let grx = 0, gry = 0, grz = 1024
 let throwId = 0
@@ -41,72 +44,63 @@ let connected = false
 
 bluetooth.onBluetoothConnected(function () {
     connected = true
-    basic.showIcon(IconNames.Yes)
-    basic.pause(400)
-    basic.clearScreen()
+    basic.showIcon(IconNames.Yes); basic.pause(400); basic.clearScreen()
 })
-bluetooth.onBluetoothDisconnected(function () {
-    connected = false
-})
+bluetooth.onBluetoothDisconnected(function () { connected = false })
 
-// send one line over USB always, and over Bluetooth when connected
 function emit(line: string) {
     serial.writeLine(line)
     if (connected) bluetooth.uartWriteLine(line)
 }
 
-function captureThrow() {
-    basic.showIcon(IconNames.Target)
-    bt = []; bx = []; by = []; bz = []; bmx = []; bmy = []
-    const start = input.runningTime()
-    while (input.runningTime() - start < CAPTURE_MS && bt.length < MAX_SAMPLES) {
-        bt.push(input.runningTime() - start)
-        bx.push(input.acceleration(Dimension.X))
-        by.push(input.acceleration(Dimension.Y))
-        bz.push(input.acceleration(Dimension.Z))
-        bmx.push(input.magneticForce(Dimension.X))
-        bmy.push(input.magneticForce(Dimension.Y))
-        basic.pause(SAMPLE_PAUSE)
-    }
-    dumpThrow()
+// record one sample into the rolling buffer; return its acceleration strength
+function record(): number {
+    const ax = input.acceleration(Dimension.X)
+    const ay = input.acceleration(Dimension.Y)
+    const az = input.acceleration(Dimension.Z)
+    rt[widx] = input.runningTime()
+    rx[widx] = ax
+    ry[widx] = ay
+    rz[widx] = az
+    rmx[widx] = input.magneticForce(Dimension.X)
+    rmy[widx] = input.magneticForce(Dimension.Y)
+    if (ax * ax + ay * ay + az * az < STILL_MG * STILL_MG) { grx = ax; gry = ay; grz = az }
+    widx = (widx + 1) % RING
+    if (filled < RING) filled += 1
+    return Math.sqrt(ax * ax + ay * ay + az * az)
 }
 
-function dumpThrow() {
+function dumpRing() {
     basic.showIcon(IconNames.SmallDiamond)
+    throwId += 1
     emit("# throw " + throwId + " gref=" + grx + "," + gry + "," + grz)
     emit("t,x,y,z,mx,my")
-    for (let i = 0; i < bt.length; i++) {
-        emit(bt[i] + "," + bx[i] + "," + by[i] + "," + bz[i] + "," + bmx[i] + "," + bmy[i])
+    const n = filled
+    for (let k = 0; k < n; k++) {
+        const i = (((widx - n + k) % RING) + RING) % RING   // oldest -> newest
+        emit(rt[i] + "," + rx[i] + "," + ry[i] + "," + rz[i] + "," + rmx[i] + "," + rmy[i])
         basic.pause(OUT_PAUSE)
     }
     emit("# end")
-    basic.showIcon(IconNames.Yes)
-    basic.pause(200)
-    basic.clearScreen()
+    basic.showIcon(IconNames.Yes); basic.pause(200); basic.clearScreen()
 }
 
-input.onButtonPressed(Button.A, function () {
-    throwId += 1
-    captureThrow()
-})
+// Button A = dump the current buffer now (no throw needed).
+input.onButtonPressed(Button.A, function () { dumpRing() })
 
 basic.forever(function () {
-    const s = input.acceleration(Dimension.Strength)
+    const s = record()
     if (armed && s > TRIGGER_MG) {
         armed = false
-        throwId += 1
-        captureThrow()
-        while (input.acceleration(Dimension.Strength) > STILL_MG) basic.pause(50)
+        const tEnd = input.runningTime() + POST_MS
+        while (input.runningTime() < tEnd) { record(); basic.pause(SAMPLE_PAUSE) }
+        dumpRing()
+        while (input.acceleration(Dimension.Strength) > STILL_MG) basic.pause(50)  // wait until still
         basic.pause(300)
         armed = true
     } else if (armed) {
         if (connected) led.plot(2, 2)
         else { led.plot(0, 0); led.plot(4, 0) }
-        if (s < STILL_MG) {
-            grx = input.acceleration(Dimension.X)
-            gry = input.acceleration(Dimension.Y)
-            grz = input.acceleration(Dimension.Z)
-        }
     }
-    basic.pause(15)
+    basic.pause(SAMPLE_PAUSE)
 })
