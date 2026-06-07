@@ -127,40 +127,57 @@
     p, new Promise((_, rej) => setTimeout(() => rej(new Error(label + ' timed out')), ms))
   ]);
 
+  // shared: connect to a chosen device, wire up notifications, and remember it
+  async function connectToDevice(device) {
+    const tag = device.name || device.id.slice(0, 10) + '…';
+    btStatus('⏳ Connecting to ' + tag + ' …');
+    device.addEventListener('gattserverdisconnected', onBtDisconnect);
+    const server = await withTimeout(device.gatt.connect(), 8000, 'Connect');
+    const service = await withTimeout(server.getPrimaryService(NUS), 6000, 'Service lookup');
+    const ch = await withTimeout(service.getCharacteristic(NUS_TX), 6000, 'Characteristic');
+    await ch.startNotifications();
+    resetStream();
+    const dec = new TextDecoder();
+    let buf = '';
+    ch.addEventListener('characteristicvaluechanged', e => {
+      buf += dec.decode(e.target.value);
+      let nl; while ((nl = buf.indexOf('\n')) >= 0) { feedLine(buf.slice(0, nl)); buf = buf.slice(nl + 1); }
+    });
+    btDevice = device;
+    try { localStorage.setItem('discBtId', device.id); } catch (_) { }
+    btStatus('✅ Connected — throw away! (remembered for one-click reconnect next time)');
+    $('connectBt').textContent = 'Disconnect Bluetooth';
+  }
+
+  // first time: pick from the chooser (the macOS "Unknown device" hunt)
   async function connectBluetooth() {
-    if (!navigator.bluetooth) {
-      alert('Web Bluetooth needs Chrome or Edge on desktop, with system Bluetooth turned on.'); return;
-    }
+    if (!navigator.bluetooth) { alert('Web Bluetooth needs Chrome or Edge on desktop, Bluetooth on.'); return; }
     let device;
     try {
-      device = await navigator.bluetooth.requestDevice({
-        acceptAllDevices: true,        // show everything; micro:bit name is hidden on macOS
-        optionalServices: [NUS]
-      });
-    } catch (e) { return; }            // user closed the picker — do nothing
-    const tag = device.name || device.id.slice(0, 10) + '…';
-    btStatus('⏳ Trying ' + tag + ' …');
-    try {
-      device.addEventListener('gattserverdisconnected', onBtDisconnect);
-      const server = await withTimeout(device.gatt.connect(), 8000, 'Connect');
-      const service = await withTimeout(server.getPrimaryService(NUS), 6000, 'Service lookup');
-      const ch = await withTimeout(service.getCharacteristic(NUS_TX), 6000, 'Characteristic');
-      await ch.startNotifications();
-      resetStream();
-      const dec = new TextDecoder();
-      let buf = '';
-      ch.addEventListener('characteristicvaluechanged', e => {
-        buf += dec.decode(e.target.value);
-        let nl; while ((nl = buf.indexOf('\n')) >= 0) { feedLine(buf.slice(0, nl)); buf = buf.slice(nl + 1); }
-      });
-      btDevice = device;
-      btStatus('✅ Connected — this is your micro:bit. Throw away! (device id ' + device.id.slice(0, 12) + '…)');
-      $('connectBt').textContent = 'Disconnect Bluetooth';
-    } catch (e) {
-      btStatus('❌ Not the micro:bit (' + e.message + '). Close & pick the next C/D/E/F device.');
+      device = await navigator.bluetooth.requestDevice({ acceptAllDevices: true, optionalServices: [NUS] });
+    } catch (e) { return; }            // user closed the picker
+    try { await connectToDevice(device); }
+    catch (e) {
+      btStatus('❌ Not the micro:bit (' + e.message + '). Click Connect again & pick the next C/D/E/F device.');
       try { device.gatt.disconnect(); } catch (_) { }
     }
   }
+
+  // afterwards: skip the chooser entirely, reconnect to the remembered micro:bit
+  async function reconnectBluetooth() {
+    if (!navigator.bluetooth || !navigator.bluetooth.getDevices) {
+      btStatus('One-click reconnect not supported here — use "Connect via Bluetooth".'); return;
+    }
+    let devices = [];
+    try { devices = await navigator.bluetooth.getDevices(); } catch (e) { }
+    if (!devices.length) { btStatus('Nothing remembered yet — use "Connect via Bluetooth" once first.'); return; }
+    let savedId = null;
+    try { savedId = localStorage.getItem('discBtId'); } catch (_) { }
+    const device = devices.find(d => d.id === savedId) || devices[0];
+    try { await connectToDevice(device); }
+    catch (e) { btStatus('❌ Reconnect failed (' + e.message + '). Is the micro:bit on (two corner dots)? Try again or use Connect.'); }
+  }
+
   function onBtDisconnect() {
     $('connectBt').textContent = 'Connect via Bluetooth'; btDevice = null;
     btStatus('Disconnected.');
@@ -169,6 +186,7 @@
     if (btDevice && btDevice.gatt.connected) btDevice.gatt.disconnect();
     else connectBluetooth();
   });
+  if ($('reconnectBt')) $('reconnectBt').addEventListener('click', reconnectBluetooth);
 
   // ---------- export ----------
   $('export').addEventListener('click', () => {
