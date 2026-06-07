@@ -152,25 +152,27 @@
     $('connectBt').textContent = 'Disconnect Bluetooth';
   }
 
-  // Pick from the chooser. filterByService=true asks the browser to show ONLY
-  // devices advertising the micro:bit UART service — if your board advertises it,
-  // there's no hunt. Otherwise use show-all. A wrong pick is auto-forgotten.
-  async function pick(filterByService) {
+  // Pick from the chooser. filterByName=true uses the same name filter the official
+  // createai tool uses, so ONLY "BBC micro:bit […]" appears — no address hunting.
+  // Otherwise show-all (then use the C/D/E/F address rule). Wrong picks auto-forget.
+  async function pick(filterByName) {
     if (!navigator.bluetooth) { alert('Web Bluetooth needs Chrome or Edge on desktop, Bluetooth on.'); return; }
     let device;
     try {
       device = await navigator.bluetooth.requestDevice(
-        filterByService ? { filters: [{ services: [NUS] }] }
+        filterByName ? { filters: [{ namePrefix: 'BBC micro:bit' }], optionalServices: [NUS] }
           : { acceptAllDevices: true, optionalServices: [NUS] });
     } catch (e) { return; }   // user closed the picker / nothing matched the filter
     try {
       await connectToDevice(device);
     } catch (e) {
+      console.error('Bluetooth connect failed:', e);
       try { device.gatt.disconnect(); } catch (_) { }
       if (typeof device.forget === 'function') { try { await device.forget(); } catch (_) { } }
       btAttempts++;
-      btStatus('❌ Not the micro:bit (attempt ' + btAttempts + '). In the picker, only try addresses ' +
-        'that start with C, D, E or F — that is the micro:bit\'s chip type. Skip everything else.');
+      btStatus('❌ Connect failed: ' + (e.message || e) + '  —  if you picked the micro:bit BY NAME, its ' +
+        'UART channel is not answering, so it is probably still running createai firmware. Re-flash the ' +
+        'combo code (LED should show two top corners) and close the createai tab.');
     }
   }
 
