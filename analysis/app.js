@@ -120,7 +120,10 @@
 
   // ---------- Web Bluetooth (single-board build) ----------
   const NUS = '6e400001-b5a3-f393-e0a9-e50e24dcca9e';      // micro:bit UART service
-  const NUS_TX = '6e400003-b5a3-f393-e0a9-e50e24dcca9e';   // micro:bit -> browser (notify)
+  // micro:bit's TX characteristic (the board NOTIFIES data out on this one).
+  // NOTE: the micro:bit swaps TX/RX vs the Nordic standard — its notify channel
+  // is …0002 (…0003 is the write channel and can't notify → "GATT not supported").
+  const NUS_TX = '6e400002-b5a3-f393-e0a9-e50e24dcca9e';
   let btDevice = null;          // currently connected device
   let lastGoodDevice = null;    // last micro:bit that worked (same-session reconnect)
   let btAttempts = 0;           // count of failed picks this hunt
