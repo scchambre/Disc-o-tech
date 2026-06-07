@@ -123,16 +123,17 @@
   const NUS_TX = '6e400003-b5a3-f393-e0a9-e50e24dcca9e';   // micro:bit -> browser (notify)
   let btDevice = null;          // currently connected device
   let lastGoodDevice = null;    // last micro:bit that worked (same-session reconnect)
-  const triedTags = [];         // labels of wrong devices we've ruled out this hunt
+  let btAttempts = 0;           // count of failed picks this hunt
   const btStatus = msg => { const el = $('btStatus'); if (el) el.textContent = msg; };
   const withTimeout = (p, ms, label) => Promise.race([
     p, new Promise((_, rej) => setTimeout(() => rej(new Error(label + ' timed out')), ms))
   ]);
-  const tagOf = d => d.name || (d.id ? d.id.slice(0, 8) + '…' : 'device');
+  // NOTE: Web Bluetooth hides the MAC address from the page for privacy, so we
+  // cannot show/label the address you see in the picker — hence the C/D/E/F tip.
 
   // shared: connect to a chosen device, wire up notifications, remember it
   async function connectToDevice(device) {
-    btStatus('⏳ Connecting to ' + tagOf(device) + ' …');
+    btStatus('⏳ Connecting…');
     device.addEventListener('gattserverdisconnected', onBtDisconnect);
     const server = await withTimeout(device.gatt.connect(), 8000, 'Connect');
     const service = await withTimeout(server.getPrimaryService(NUS), 6000, 'Service lookup');
@@ -146,7 +147,7 @@
     });
     btDevice = device; lastGoodDevice = device;
     try { localStorage.setItem('discBtId', device.id); } catch (_) { }
-    triedTags.length = 0;       // hunt is over
+    btAttempts = 0;             // hunt is over
     btStatus('✅ Connected to your micro:bit — throw away! ⚡ Reconnect works the rest of this session.');
     $('connectBt').textContent = 'Disconnect Bluetooth';
   }
@@ -167,9 +168,9 @@
     } catch (e) {
       try { device.gatt.disconnect(); } catch (_) { }
       if (typeof device.forget === 'function') { try { await device.forget(); } catch (_) { } }
-      triedTags.push(tagOf(device));
-      btStatus('❌ Not it: ' + tagOf(device) + '  ·  ruled out: ' + triedTags.join(', ') +
-        '  ·  click "Bluetooth · show all" for the next.');
+      btAttempts++;
+      btStatus('❌ Not the micro:bit (attempt ' + btAttempts + '). In the picker, only try addresses ' +
+        'that start with C, D, E or F — that is the micro:bit\'s chip type. Skip everything else.');
     }
   }
 
