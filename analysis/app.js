@@ -21,7 +21,7 @@
       tr.innerHTML =
         `<td>${r.label}</td><td>${fmt(m.rpm)}</td><td>${fmt(m.releaseTiltDeg, 1)}</td>` +
         `<td>${fmt(m.flightTiltDeg, 1)}</td><td>${fmt(m.peakG, 1)}</td>` +
-        `<td>${fmt(m.spinStabilityPct, 1)}</td><td>${fmt(m.sampleRateHz, 0)}</td>` +
+        `<td>${fmt(m.spinWobbleDeg, 1)}</td><td>${fmt(m.sampleRateHz, 0)}</td>` +
         `<td class="${m.warnings.length ? 'warn' : ''}">${m.warnings.length || ''}</td>`;
       tb.appendChild(tr);
     });
@@ -210,11 +210,11 @@
   // ---------- export ----------
   $('export').addEventListener('click', () => {
     if (!results.length) return;
-    const head = 'label,rpm,reach_tilt_deg,flight_tilt_deg,peak_g,spin_stability_pct,sample_rate_hz,warnings';
+    const head = 'label,rpm,reach_tilt_deg,flight_tilt_deg,peak_g,spin_wobble_deg,sample_rate_hz,warnings';
     const lines = results.map(r => {
       const m = r.m;
       return [r.label, fmt(m.rpm), fmt(m.releaseTiltDeg, 1), fmt(m.flightTiltDeg, 1),
-      fmt(m.peakG, 1), fmt(m.spinStabilityPct, 1), fmt(m.sampleRateHz, 0),
+      fmt(m.peakG, 1), fmt(m.spinWobbleDeg, 1), fmt(m.sampleRateHz, 0),
       '"' + m.warnings.join(' | ') + '"'].join(',');
     });
     const blob = new Blob([[head, ...lines].join('\n')], { type: 'text/csv' });

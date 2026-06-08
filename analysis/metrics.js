@@ -40,6 +40,25 @@
     return ssTot === 0 ? 0 : 1 - ssRes / ssTot;
   }
 
+  // Least-squares quadratic fit y ≈ a + b·x + c·x² (3x3 normal equations, Cramer's rule).
+  // Used to model a steady spin that may gently slow down, so the leftover = real wobble.
+  function polyfit2(xs, ys) {
+    let S0 = xs.length, S1 = 0, S2 = 0, S3 = 0, S4 = 0, T0 = 0, T1 = 0, T2 = 0;
+    for (let i = 0; i < xs.length; i++) {
+      const x = xs[i], y = ys[i], x2 = x * x;
+      S1 += x; S2 += x2; S3 += x2 * x; S4 += x2 * x2; T0 += y; T1 += x * y; T2 += x2 * y;
+    }
+    const det3 = m =>
+      m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1]) -
+      m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0]) +
+      m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0]);
+    const A = [[S0, S1, S2], [S1, S2, S3], [S2, S3, S4]], col = [T0, T1, T2];
+    const D = det3(A);
+    if (Math.abs(D) < 1e-12) return { a: 0, b: 0, c: 0 };
+    const repl = j => A.map((row, i) => row.map((v, k) => (k === j ? col[i] : v)));
+    return { a: det3(repl(0)) / D, b: det3(repl(1)) / D, c: det3(repl(2)) / D };
+  }
+
   // Phase unwrap: remove 2*pi jumps so we can fit a straight line through it.
   function unwrap(p) {
     const out = p.slice();
@@ -151,21 +170,29 @@
     }
     const peakG = peak / gScale;
 
-    // RPM from magnetometer phase, over the post-release (flight) region.
-    // Tolerate occasional dropped samples (e.g. Bluetooth packet loss) by using
-    // only the samples that actually have valid mx,my instead of all-or-nothing.
-    let rpm = null, spinStabilityPct = null, flightTiltDeg = null;
+    // Spin metrics from the magnetometer phase, over the STEADY FLIGHT region.
+    // Tolerate dropped samples (Bluetooth loss), and skip the release spike / spin-up
+    // so RPM, wobble and flight-tilt all reflect steady flight — not the throw itself.
+    let rpm = null, spinWobbleDeg = null, flightTiltDeg = null;
     const segAll = samples.slice(releaseIdx);
-    const seg = segAll.filter(s => s.mx != null && s.my != null && !isNaN(s.mx) && !isNaN(s.my));
+    let seg = segAll.filter(s => s.mx != null && s.my != null && !isNaN(s.mx) && !isNaN(s.my) &&
+      s.x != null && s.y != null && !isNaN(s.x) && !isNaN(s.y));
     const droppedMag = segAll.length - seg.length;
+    {
+      // drop leading samples whose acceleration is still well above gravity (the throw)
+      const totOf = s => (s.total != null ? s.total : Math.hypot(s.x, s.y, s.z));
+      let sf = 0;
+      while (sf < seg.length && totOf(seg[sf]) > 2.5 * gScale) sf++;
+      seg = seg.slice(sf);
+    }
     if (seg.length < 8) {
-      warnings.push('Too few magnetometer samples for RPM (' + seg.length + ' usable' +
+      warnings.push('Too few clean flight samples to read spin (' + seg.length + ' usable' +
         (droppedMag ? ', ' + droppedMag + ' missing — link dropping data' : '') + ').');
     } else {
       if (droppedMag > segAll.length * 0.15) {
-        warnings.push(droppedMag + ' samples lost mag data (link drops) — RPM is approximate.');
+        warnings.push(droppedMag + ' samples lost data (link drops) — readings approximate.');
       }
-      const t0 = samples[releaseIdx].t;
+      const t0 = seg[0].t;
       const secs = seg.map(s => (s.t - t0) / 1000);
       const mxC = center(seg.map(s => s.mx));
       const myC = center(seg.map(s => s.my));
@@ -177,36 +204,33 @@
       const fit = linreg(secs, phase);
       const r2 = rSquared(secs, phase, fit);
       if (amp < 4 || r2 < 0.9) {
-        // Not a real rotation — don't invent an RPM from noise.
+        // Not a real rotation — don't invent numbers from noise.
         warnings.push('No steady rotation detected (signal ' + amp.toFixed(1) + ' µT, fit ' +
-          (r2 * 100).toFixed(0) + '%). RPM needs a clean spin about the disc axis — ' +
+          (r2 * 100).toFixed(0) + '%). RPM/wobble need a clean spin about the disc axis — ' +
           'sliding or shaking just reads sensor noise.');
       } else {
         rpm = Math.abs(fit.slope) * 60 / (2 * Math.PI);
-        const inst = [];
-        for (let i = 1; i < phase.length; i++) {
-          const dt = secs[i] - secs[i - 1];
-          if (dt > 0) inst.push(Math.abs((phase[i] - phase[i - 1]) / dt));
-        }
-        const m = mean(inst);
-        spinStabilityPct = m > 0 ? (std(inst) / m) * 100 : null;
 
-        // FLIGHT TILT: in the air, gravity shows up as a spin-frequency wobble in the
-        // in-plane accel with amplitude g*sin(tilt). After skipping the release spike,
-        // centering removes the centripetal DC, leaving an oscillation whose radius ≈
-        // g*sin(tilt). This is the disc's ACTUAL attitude in flight (vs. how it was held).
-        const tot = j => (seg[j].total != null ? seg[j].total : Math.hypot(seg[j].x, seg[j].y, seg[j].z));
-        let sf = 0;
-        while (sf < seg.length && tot(sf) > 2.5 * gScale) sf++;   // skip the throw spike
-        const fseg = seg.slice(sf).filter(s => s.x != null && s.y != null && !isNaN(s.x) && !isNaN(s.y));
-        if (fseg.length >= 8) {
-          const axC = center(fseg.map(s => s.x));
-          const ayC = center(fseg.map(s => s.y));
-          const inPlaneAmp = Math.sqrt(mean(axC.map((v, k) => v * v + ayC[k] * ayC[k])));
-          flightTiltDeg = Math.asin(Math.min(1, inPlaneAmp / gScale)) * 180 / Math.PI;
-          if (fseg.some(s => Math.abs(s.x) > 7.6 * gScale || Math.abs(s.y) > 7.6 * gScale)) {
-            warnings.push('In-flight accel clipped (±8 g) — flight angle under-reads; mount nearer the disc center.');
-          }
+        // SPIN WOBBLE (degrees), noise-floor removed. Fit a quadratic (steady rate +
+        // gentle spin-down); the leftover residual is wobble + noise. Estimate the
+        // white-noise variance from high-frequency jitter (consecutive differences) and
+        // subtract it, so what's left is REAL wobble, not sensor noise.
+        const q = polyfit2(secs, phase);
+        const resid = phase.map((p, i) => p - (q.a + q.b * secs[i] + q.c * secs[i] * secs[i]));
+        const diffs = [];
+        for (let i = 1; i < resid.length; i++) diffs.push(resid[i] - resid[i - 1]);
+        const noiseVar = diffs.length ? variance(diffs) / 2 : 0;
+        spinWobbleDeg = Math.sqrt(Math.max(0, variance(resid) - noiseVar)) * 180 / Math.PI;
+
+        // FLIGHT TILT (degrees): in the air, gravity appears as a spin-frequency wobble
+        // in the in-plane accel with amplitude g*sin(tilt). Centering removes the
+        // centripetal DC; the leftover oscillation radius ≈ g*sin(tilt) = actual attitude.
+        const axC = center(seg.map(s => s.x));
+        const ayC = center(seg.map(s => s.y));
+        const inPlaneAmp = Math.sqrt(mean(axC.map((v, i) => v * v + ayC[i] * ayC[i])));
+        flightTiltDeg = Math.asin(Math.min(1, inPlaneAmp / gScale)) * 180 / Math.PI;
+        if (seg.some(s => Math.abs(s.x) > 7.6 * gScale || Math.abs(s.y) > 7.6 * gScale)) {
+          warnings.push('In-flight accel clipped (±8 g) — flight angle under-reads; mount nearer the disc center.');
         }
 
         if (sampleRateHz < 2.2 * (rpm / 60)) {
@@ -218,7 +242,7 @@
 
     return {
       ok: true, n, durationMs, sampleRateHz, peakG,
-      releaseTiltDeg, releaseTiltDirDeg, flightTiltDeg, rpm, spinStabilityPct,
+      releaseTiltDeg, releaseTiltDirDeg, flightTiltDeg, rpm, spinWobbleDeg,
       releaseIdx, releaseTimeMs: tms[releaseIdx], gScale, warnings,
       series: { tms, total, mx: samples.map(s => s.mx), my: samples.map(s => s.my), releaseIdx }
     };

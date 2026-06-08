@@ -21,7 +21,7 @@ const table = throwsArr.map((t, i) => {
     'reach°': f(m.releaseTiltDeg, 1),
     'flight°': f(m.flightTiltDeg, 1),
     'peak_g': f(m.peakG, 1),
-    'wobble%': f(m.spinStabilityPct, 1),
+    'wobble°': f(m.spinWobbleDeg, 1),
     'rate_Hz': f(m.sampleRateHz, 0),
     n: m.n,
   };
