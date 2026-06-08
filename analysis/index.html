@@ -63,7 +63,7 @@
 
   <table>
     <thead><tr>
-      <th>throw</th><th>RPM</th><th>tilt °</th><th>tilt dir °</th><th>peak g</th>
+      <th>throw</th><th>RPM</th><th>reach °</th><th>flight °</th><th>peak g</th>
       <th>spin&nbsp;wobble&nbsp;%</th><th>rate Hz</th><th>⚠</th>
     </tr></thead>
     <tbody id="rows"></tbody>
@@ -72,8 +72,9 @@
   <div id="plotTitle"></div>
   <canvas id="accCanvas" width="940" height="200"></canvas>
   <canvas id="magCanvas" width="940" height="200"></canvas>
-  <p class="muted">Click a row to plot it. <b>tilt</b> = disc-axis lean at release (hyzer+nose combined, disc-frame).
-     <b>wobble</b> = spin-rate variability (lower = cleaner release). RPM needs sample rate ≳ 2× spin frequency.</p>
+  <p class="muted">Click a row to plot it. <b>reach °</b> = how the disc was tilted while held still in your reach-back.
+     <b>flight °</b> = the disc's actual spin-axis tilt in the air (measured from the gravity wobble — the truer release angle; needs a real spin).
+     Both are total lean (hyzer + nose combined). <b>wobble</b> = spin-rate variability (lower = cleaner). RPM needs sample rate ≳ 2× spin frequency.</p>
 </main>
 
 <script src="metrics.js"></script>

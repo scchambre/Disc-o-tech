@@ -18,8 +18,8 @@ const table = throwsArr.map((t, i) => {
   return {
     throw: i + 1,
     RPM: f(m.rpm),
-    'tilt°': f(m.releaseTiltDeg, 1),
-    'dir°': f(m.releaseTiltDirDeg, 0),
+    'reach°': f(m.releaseTiltDeg, 1),
+    'flight°': f(m.flightTiltDeg, 1),
     'peak_g': f(m.peakG, 1),
     'wobble%': f(m.spinStabilityPct, 1),
     'rate_Hz': f(m.sampleRateHz, 0),

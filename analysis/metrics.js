@@ -154,7 +154,7 @@
     // RPM from magnetometer phase, over the post-release (flight) region.
     // Tolerate occasional dropped samples (e.g. Bluetooth packet loss) by using
     // only the samples that actually have valid mx,my instead of all-or-nothing.
-    let rpm = null, spinStabilityPct = null;
+    let rpm = null, spinStabilityPct = null, flightTiltDeg = null;
     const segAll = samples.slice(releaseIdx);
     const seg = segAll.filter(s => s.mx != null && s.my != null && !isNaN(s.mx) && !isNaN(s.my));
     const droppedMag = segAll.length - seg.length;
@@ -190,6 +190,25 @@
         }
         const m = mean(inst);
         spinStabilityPct = m > 0 ? (std(inst) / m) * 100 : null;
+
+        // FLIGHT TILT: in the air, gravity shows up as a spin-frequency wobble in the
+        // in-plane accel with amplitude g*sin(tilt). After skipping the release spike,
+        // centering removes the centripetal DC, leaving an oscillation whose radius ≈
+        // g*sin(tilt). This is the disc's ACTUAL attitude in flight (vs. how it was held).
+        const tot = j => (seg[j].total != null ? seg[j].total : Math.hypot(seg[j].x, seg[j].y, seg[j].z));
+        let sf = 0;
+        while (sf < seg.length && tot(sf) > 2.5 * gScale) sf++;   // skip the throw spike
+        const fseg = seg.slice(sf).filter(s => s.x != null && s.y != null && !isNaN(s.x) && !isNaN(s.y));
+        if (fseg.length >= 8) {
+          const axC = center(fseg.map(s => s.x));
+          const ayC = center(fseg.map(s => s.y));
+          const inPlaneAmp = Math.sqrt(mean(axC.map((v, k) => v * v + ayC[k] * ayC[k])));
+          flightTiltDeg = Math.asin(Math.min(1, inPlaneAmp / gScale)) * 180 / Math.PI;
+          if (fseg.some(s => Math.abs(s.x) > 7.6 * gScale || Math.abs(s.y) > 7.6 * gScale)) {
+            warnings.push('In-flight accel clipped (±8 g) — flight angle under-reads; mount nearer the disc center.');
+          }
+        }
+
         if (sampleRateHz < 2.2 * (rpm / 60)) {
           warnings.push('Sample rate ' + sampleRateHz.toFixed(0) + ' Hz too low for ' +
             rpm.toFixed(0) + ' RPM — aliasing likely. Use an IMU with a gyro for drives.');
@@ -199,7 +218,7 @@
 
     return {
       ok: true, n, durationMs, sampleRateHz, peakG,
-      releaseTiltDeg, releaseTiltDirDeg, rpm, spinStabilityPct,
+      releaseTiltDeg, releaseTiltDirDeg, flightTiltDeg, rpm, spinStabilityPct,
       releaseIdx, releaseTimeMs: tms[releaseIdx], gScale, warnings,
       series: { tms, total, mx: samples.map(s => s.mx), my: samples.map(s => s.my), releaseIdx }
     };
