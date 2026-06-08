@@ -29,6 +29,17 @@
     return { slope, intercept: my - slope * mx };
   }
 
+  // R²: how well the points follow the fitted line. ~1 = phase climbs linearly
+  // (a real, steady rotation); low = the "rotation" is just noise/wandering.
+  function rSquared(xs, ys, fit) {
+    const m = mean(ys); let ssRes = 0, ssTot = 0;
+    for (let i = 0; i < xs.length; i++) {
+      const pred = fit.slope * xs[i] + fit.intercept;
+      ssRes += (ys[i] - pred) ** 2; ssTot += (ys[i] - m) ** 2;
+    }
+    return ssTot === 0 ? 0 : 1 - ssRes / ssTot;
+  }
+
   // Phase unwrap: remove 2*pi jumps so we can fit a straight line through it.
   function unwrap(p) {
     const out = p.slice();
@@ -158,12 +169,20 @@
       const secs = seg.map(s => (s.t - t0) / 1000);
       const mxC = center(seg.map(s => s.mx));
       const myC = center(seg.map(s => s.my));
-      if (Math.hypot(std(mxC), std(myC)) < 1e-6) {
-        warnings.push('Magnetometer signal too flat to read spin (was it actually spinning?).');
+      // Amplitude = radius of the circle the field traces in the disc plane. A real
+      // spin traces a wide circle (~Earth's horizontal field, tens of µT); sliding or
+      // shaking leaves a tiny noisy blob near the origin.
+      const amp = Math.sqrt(mean(mxC.map((v, i) => v * v + myC[i] * myC[i])));
+      const phase = unwrap(mxC.map((_, i) => Math.atan2(myC[i], mxC[i])));
+      const fit = linreg(secs, phase);
+      const r2 = rSquared(secs, phase, fit);
+      if (amp < 4 || r2 < 0.9) {
+        // Not a real rotation — don't invent an RPM from noise.
+        warnings.push('No steady rotation detected (signal ' + amp.toFixed(1) + ' µT, fit ' +
+          (r2 * 100).toFixed(0) + '%). RPM needs a clean spin about the disc axis — ' +
+          'sliding or shaking just reads sensor noise.');
       } else {
-        const phase = unwrap(mxC.map((_, i) => Math.atan2(myC[i], mxC[i])));
-        const omega = Math.abs(linreg(secs, phase).slope);    // rad/s
-        rpm = omega * 60 / (2 * Math.PI);
+        rpm = Math.abs(fit.slope) * 60 / (2 * Math.PI);
         const inst = [];
         for (let i = 1; i < phase.length; i++) {
           const dt = secs[i] - secs[i - 1];
