@@ -44,9 +44,15 @@ let connected = false
 
 bluetooth.onBluetoothConnected(function () {
     connected = true
-    basic.showIcon(IconNames.Yes); basic.pause(400); basic.clearScreen()
+    music.playTone(Note.C, 150)        // rising two-note = connected
+    music.playTone(Note.G, 150)
+    basic.showIcon(IconNames.Yes); basic.pause(300); basic.clearScreen()
 })
-bluetooth.onBluetoothDisconnected(function () { connected = false })
+bluetooth.onBluetoothDisconnected(function () {
+    connected = false
+    music.playTone(Note.G, 150)        // falling two-note = disconnected
+    music.playTone(Note.C, 150)
+})
 
 function emit(line: string) {
     serial.writeLine(line)

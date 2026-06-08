@@ -44,7 +44,7 @@
   function addThrow(throwObj, labelHint) {
     const m = analyzeThrow(throwObj);
     throwCounter++;
-    results.push({ label: labelHint || ('throw ' + throwCounter), m });
+    results.push({ label: labelHint || ('throw ' + throwCounter), m, samples: throwObj.samples || [] });
     render();
   }
 
@@ -217,10 +217,25 @@
       fmt(m.peakG, 1), fmt(m.spinWobbleDeg, 1), fmt(m.sampleRateHz, 0),
       '"' + m.warnings.join(' | ') + '"'].join(',');
     });
-    const blob = new Blob([[head, ...lines].join('\n')], { type: 'text/csv' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob); a.download = 'disc-o-tech-results.csv'; a.click();
+    downloadCsv([head, ...lines].join('\n'), 'disc-o-tech-results.csv');
   });
+
+  // Export EVERY raw sample of every throw (for graphing in other software).
+  $('exportRaw').addEventListener('click', () => {
+    if (!results.length) return;
+    const v = x => (x == null || isNaN(x)) ? '' : x;
+    const rows = ['throw,t_ms,x,y,z,total,mx,my'];
+    results.forEach(r => (r.samples || []).forEach(s =>
+      rows.push(['"' + String(r.label).replace(/"/g, '""') + '"',
+        v(s.t), v(s.x), v(s.y), v(s.z), v(s.total), v(s.mx), v(s.my)].join(','))));
+    downloadCsv(rows.join('\n'), 'disc-o-tech-raw.csv');
+  });
+
+  function downloadCsv(text, name) {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([text], { type: 'text/csv' }));
+    a.download = name; a.click();
+  }
   $('clear').addEventListener('click', () => { results.length = 0; throwCounter = 0; render(); });
 
   render();
