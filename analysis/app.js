@@ -127,7 +127,7 @@
   let btDevice = null;          // currently connected device
   let lastGoodDevice = null;    // last micro:bit that worked (same-session reconnect)
   let btAttempts = 0;           // count of failed picks this hunt
-  const btStatus = msg => { const el = $('btStatus'); if (el) el.textContent = msg; };
+  const btStatus = msg => { ['btStatus', 'btStatus2'].forEach(id => { const el = $(id); if (el) el.textContent = msg; }); };
   const withTimeout = (p, ms, label) => Promise.race([
     p, new Promise((_, rej) => setTimeout(() => rej(new Error(label + ' timed out')), ms))
   ]);
@@ -205,6 +205,7 @@
     else pick(false);
   });
   if ($('connectBtFilter')) $('connectBtFilter').addEventListener('click', () => pick(true));
+  if ($('connectBtFilter2')) $('connectBtFilter2').addEventListener('click', () => pick(true));
   if ($('reconnectBt')) $('reconnectBt').addEventListener('click', reconnectBluetooth);
 
   // ---------- export ----------

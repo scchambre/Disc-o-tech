@@ -141,14 +141,22 @@
   // ---------- main analysis ----------
   function analyzeThrow(input) {
     const throwObj = Array.isArray(input) ? { samples: input, gravityRef: null } : input;
-    const samples = throwObj.samples;
     const warnings = [];
-    const n = samples.length;
-    if (n < 8) return { ok: false, warnings: ['Too few samples (' + n + ')'], series: emptySeries() };
+    const raw = throwObj.samples || [];
+    if (raw.length < 8) return { ok: false, warnings: ['Too few samples (' + raw.length + ')'], series: emptySeries() };
 
+    // Sort by timestamp so out-of-order or corrupted rows (flaky Bluetooth) can't
+    // produce negative durations / sample rates.
+    const samples = raw.slice().sort((a, b) => a.t - b.t);
+    const n = samples.length;
     const tms = samples.map(s => s.t - samples[0].t);
-    const durationMs = tms[n - 1] || 1;
-    const sampleRateHz = 1000 * (n - 1) / durationMs;
+    const durationMs = Math.max(1, tms[n - 1]);
+    // Robust sample rate from the MEDIAN gap between samples (ignores a few bad timestamps).
+    const dts = [];
+    for (let i = 1; i < n; i++) { const d = tms[i] - tms[i - 1]; if (d > 0) dts.push(d); }
+    const sampleRateHz = dts.length
+      ? 1000 / dts.slice().sort((a, b) => a - b)[Math.floor(dts.length / 2)]
+      : 1000 * (n - 1) / durationMs;
     const total = samples.map(s => (s.total != null ? s.total : Math.hypot(s.x, s.y, s.z)));
 
     // release = biggest acceleration spike

@@ -104,6 +104,7 @@ basic.forever(function () {
         while (input.acceleration(Dimension.Strength) > STILL_MG) basic.pause(50)  // wait until still
         basic.pause(300)
         armed = true
+        music.playTone(Note.E, 120)        // "ready" beep — safe to throw again
     } else if (armed) {
         if (connected) led.plot(2, 2)
         else { led.plot(0, 0); led.plot(4, 0) }
