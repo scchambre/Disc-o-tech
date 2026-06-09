@@ -55,8 +55,10 @@ bluetooth.onBluetoothDisconnected(function () {
 })
 
 function emit(line: string) {
-    serial.writeLine(line)
+    // Send over Bluetooth if a browser is connected, else USB serial — NEVER both,
+    // so the analyzer can't receive (and double-count) every line twice.
     if (connected) bluetooth.uartWriteLine(line)
+    else serial.writeLine(line)
 }
 
 // record one sample into the rolling buffer; return its acceleration strength
@@ -88,6 +90,7 @@ function dumpRing() {
         basic.pause(OUT_PAUSE)
     }
     emit("# end")
+    widx = 0; filled = 0        // clear the buffer so the next throw can't include stale samples
     basic.showIcon(IconNames.Yes); basic.pause(200); basic.clearScreen()
 }
 

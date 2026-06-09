@@ -154,7 +154,10 @@
 
     // Sort by timestamp so out-of-order or corrupted rows (flaky Bluetooth) can't
     // produce negative durations / sample rates.
-    const samples = raw.slice().sort((a, b) => a.t - b.t);
+    const sorted = raw.slice().sort((a, b) => a.t - b.t);
+    // Drop duplicate-timestamp samples — e.g. if the same line was received twice
+    // (USB serial + Bluetooth both connected), which otherwise scrambles the spin math.
+    const samples = sorted.filter((s, i) => i === 0 || s.t !== sorted[i - 1].t);
     const n = samples.length;
     const tms = samples.map(s => s.t - samples[0].t);
     const durationMs = Math.max(1, tms[n - 1]);
