@@ -38,14 +38,16 @@
 
   function plot(i) {
     const m = results[i].m, s = m.series;
+    const t = s.tms || [];
+    const relX = t.length ? t[s.releaseIdx] : null;   // release marker at its TIME, not index
     $('plotTitle').textContent = results[i].label +
       (m.warnings.length ? '  ⚠ ' + m.warnings.join('  ·  ') : '');
     window.DiscPlot.draw($('accCanvas'),
-      [{ ys: s.total, color: '#4fa3ff', label: 'accel strength' }],
-      { title: 'acceleration', xlabel: 'sample', releaseX: s.releaseIdx });
+      [{ xs: t, ys: s.total, color: '#4fa3ff', label: 'accel strength' }],
+      { title: 'acceleration', xlabel: 'time (ms)', releaseX: relX });
     window.DiscPlot.draw($('magCanvas'),
-      [{ ys: s.mx, color: '#ff7a59', label: 'mag X' }, { ys: s.my, color: '#5fd38b', label: 'mag Y' }],
-      { title: 'magnetometer (spin)', xlabel: 'sample', releaseX: s.releaseIdx });
+      [{ xs: t, ys: s.mx, color: '#ff7a59', label: 'mag X' }, { xs: t, ys: s.my, color: '#5fd38b', label: 'mag Y' }],
+      { title: 'magnetometer (spin)', xlabel: 'time (ms)', releaseX: relX });
   }
 
   function addThrow(throwObj, labelHint) {

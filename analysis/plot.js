@@ -43,7 +43,14 @@
     ctx.fillStyle = '#8a97a5'; ctx.font = '10px system-ui,sans-serif';
     ctx.fillText(yMax.toFixed(0), 4, py(yMax) + 8);
     ctx.fillText(yMin.toFixed(0), 4, py(yMin));
-    if (opts.xlabel) ctx.fillText(opts.xlabel, W - pad.r - 60, H - 6);
+    // x-axis: min at left, max at right, label centered along the bottom
+    ctx.fillText(xMin.toFixed(0), pad.l, H - 6);
+    const xmaxTxt = xMax.toFixed(0);
+    ctx.fillText(xmaxTxt, W - pad.r - ctx.measureText(xmaxTxt).width, H - 6);
+    if (opts.xlabel) {
+      const lw = ctx.measureText(opts.xlabel).width;
+      ctx.fillText(opts.xlabel, (W - lw) / 2, H - 6);
+    }
 
     // release marker
     if (opts.releaseX != null) {
