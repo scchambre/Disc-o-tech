@@ -78,7 +78,7 @@ function dumpThrow() {
     // SAMPLES: tag = index, then t, ax, ay, az, mx, my
     for (let i = 0; i < count; i++) {
         sendPacket(i, bt[i], bx[i], by[i], bz[i], Math.round(bmx[i]), Math.round(bmy[i]))
-        basic.pause(4)   // give the radio time; raise if the base station drops samples
+        basic.pause(8)   // pace so the base station can keep up over USB serial (was 4 -> dropped ~24%)
     }
     // END: tag -2
     sendPacket(-2, throwId, 0, 0, 0, 0, 0)

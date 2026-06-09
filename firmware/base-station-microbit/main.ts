@@ -30,17 +30,12 @@ radio.onReceivedBuffer(function (buf: Buffer) {
         serial.writeLine("# throw " + id + " gref=" + grx + "," + gry + "," + grz)
         // header every throw, so connecting the analyzer mid-session still parses
         serial.writeLine("t,x,y,z,mx,my")
-        basic.showLeds(`
-            . . # . .
-            . . # . .
-            . . # . .
-            . . . . .
-            . . # . .
-            `)
+        // keep the receive handler FAST (no slow LED rendering) so the sample burst
+        // that follows doesn't overflow the radio queue
     } else if (tag == -2) {
         serial.writeLine("# end")
-        basic.showIcon(IconNames.Yes)
-        basic.pause(150)
+        basic.showIcon(IconNames.Yes)   // ✓ = a throw fully arrived (safe here — it's the last packet)
+        basic.pause(120)
         basic.clearScreen()
     } else {
         // SAMPLE: tag = index, then t, x, y, z, mx, my
