@@ -2,10 +2,11 @@
  * ---------------------------------------------------------------
  * Tape this one to the disc. It runs hands-free:
  *   1. waits, watching for a throw (big acceleration spike)
- *   2. captures accel + magnetometer into RAM at high rate (~120-150 Hz)
+ *   2. captures accel + magnetometer into RAM as fast as the sensors allow
+ *      (from the throw forward — no run-up; watch "rate Hz" in the analyzer)
  *   3. beams every sample to the base-station micro:bit over radio
- *   4. waits until the disc is still again, then re-arms
- * So you never unplug it — throw, fetch, throw again.
+ *   4. waits until still, re-arms, and BEEPS when ready for the next throw
+ * So you never unplug it — throw, fetch (wait for the beep), throw again.
  *
  * HOW TO LOAD: open https://makecode.microbit.org → New Project →
  * click the {} JavaScript toggle → paste this over everything → Download.
@@ -22,7 +23,7 @@ const MAX_SAMPLES = 200      // RAM cap per throw
 const CAPTURE_MS = 1500      // how long to record after a throw fires
 const TRIGGER_MG = 2600      // strength that starts a capture (~2.6 g)
 const STILL_MG = 1300        // below this counts as "still" (re-arm + gravity ref)
-const SAMPLE_PAUSE = 5       // ms between samples (actual time is logged per sample)
+const SAMPLE_PAUSE = 5       // smaller = faster sampling (higher RPM ceiling) until the magnetometer caps it
 
 // ---- capture buffers ----
 let bt: number[] = []
@@ -76,7 +77,7 @@ function dumpThrow() {
     basic.pause(6)
     // SAMPLES: tag = index, then t, ax, ay, az, mx, my
     for (let i = 0; i < count; i++) {
-        sendPacket(i, bt[i], bx[i], by[i], bz[i], bmx[i], bmy[i])
+        sendPacket(i, bt[i], bx[i], by[i], bz[i], Math.round(bmx[i]), Math.round(bmy[i]))
         basic.pause(4)   // give the radio time; raise if the base station drops samples
     }
     // END: tag -2
@@ -102,6 +103,7 @@ basic.forever(function () {
         while (input.acceleration(Dimension.Strength) > STILL_MG) basic.pause(50)
         basic.pause(300)
         armed = true
+        music.playTone(Note.E, 120)        // "ready" beep — safe to throw again
     } else if (armed) {
         led.plot(2, 2)                 // dim center dot = armed & waiting
         if (s < STILL_MG) {            // update gravity reference while still
