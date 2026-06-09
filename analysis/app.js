@@ -29,7 +29,7 @@
         `<td>${r.label}</td><td>${fmt(m.rpm)}</td><td>${fmt(m.releaseTiltDeg, 1)}</td>` +
         `<td>${fmt(m.flightTiltDeg, 1)}</td><td>${cardCell}</td><td>${relCell}</td><td>${fmt(m.peakG, 1)}</td>` +
         `<td>${fmt(m.spinWobbleDeg, 1)}</td><td>${fmt(m.sampleRateHz, 0)}</td>` +
-        `<td class="${m.warnings.length ? 'warn' : ''}">${m.warnings.length || ''}</td>`;
+        `<td class="${m.warnings.length ? 'warn' : ''}" title="${m.warnings.join(' · ').replace(/"/g, "'")}">${m.warnings.length || ''}</td>`;
       tb.appendChild(tr);
     });
     $('count').textContent = results.length;

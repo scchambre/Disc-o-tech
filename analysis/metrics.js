@@ -221,8 +221,9 @@
       const phase = unwrap(mxC.map((_, i) => Math.atan2(myC[i], mxC[i])));
       const fit = linreg(secs, phase);
       const r2 = rSquared(secs, phase, fit);
-      if (amp < 4 || r2 < 0.9) {
-        // Not a real rotation — don't invent numbers from noise.
+      if (amp < 4 || r2 < 0.75) {
+        // Not a real rotation — don't invent numbers from noise. (0.75 lets real-but-
+        // wobbly throws register; the wobble° value flags how clean each one was.)
         warnings.push('No steady rotation detected (signal ' + amp.toFixed(1) + ' µT, fit ' +
           (r2 * 100).toFixed(0) + '%). RPM/wobble need a clean spin about the disc axis — ' +
           'sliding or shaking just reads sensor noise.');
