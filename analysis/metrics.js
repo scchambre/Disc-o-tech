@@ -70,6 +70,13 @@
     return out;
   }
 
+  // Circular mean of angles (radians) -> degrees in [0,360). Robust to wraparound.
+  function circularMeanDeg(rads) {
+    let s = 0, c = 0;
+    for (const a of rads) { s += Math.sin(a); c += Math.cos(a); }
+    return ((Math.atan2(s, c) * 180 / Math.PI) % 360 + 360) % 360;
+  }
+
   // ---------- CSV parsing ----------
   function classify(h) {
     const s = String(h).toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -181,7 +188,7 @@
     // Spin metrics from the magnetometer phase, over the STEADY FLIGHT region.
     // Tolerate dropped samples (Bluetooth loss), and skip the release spike / spin-up
     // so RPM, wobble and flight-tilt all reflect steady flight — not the throw itself.
-    let rpm = null, spinWobbleDeg = null, flightTiltDeg = null;
+    let rpm = null, spinWobbleDeg = null, flightTiltDeg = null, flightLeanBearingDeg = null;
     const segAll = samples.slice(releaseIdx);
     let seg = segAll.filter(s => s.mx != null && s.my != null && !isNaN(s.mx) && !isNaN(s.my) &&
       s.x != null && s.y != null && !isNaN(s.x) && !isNaN(s.y));
@@ -241,6 +248,18 @@
           warnings.push('In-flight accel clipped (±8 g) — flight angle under-reads; mount nearer the disc center.');
         }
 
+        // LEAN BEARING (cardinal): which compass direction the disc tips toward. The
+        // gravity wobble (accel) and the field (mag) both rotate with the disc; the
+        // constant phase offset between them is the lean's bearing from magnetic north.
+        // Only meaningful when there's a real lean — a flat disc has no lean direction.
+        if (flightTiltDeg > 5) {
+          const delta = [];
+          for (let i = 0; i < seg.length; i++) {
+            delta.push(Math.atan2(ayC[i], axC[i]) - Math.atan2(myC[i], mxC[i]));
+          }
+          flightLeanBearingDeg = circularMeanDeg(delta);
+        }
+
         if (sampleRateHz < 2.2 * (rpm / 60)) {
           warnings.push('Sample rate ' + sampleRateHz.toFixed(0) + ' Hz too low for ' +
             rpm.toFixed(0) + ' RPM — aliasing likely. Use an IMU with a gyro for drives.');
@@ -250,7 +269,7 @@
 
     return {
       ok: true, n, durationMs, sampleRateHz, peakG,
-      releaseTiltDeg, releaseTiltDirDeg, flightTiltDeg, rpm, spinWobbleDeg,
+      releaseTiltDeg, releaseTiltDirDeg, flightTiltDeg, flightLeanBearingDeg, rpm, spinWobbleDeg,
       releaseIdx, releaseTimeMs: tms[releaseIdx], gScale, warnings,
       series: { tms, total, mx: samples.map(s => s.mx), my: samples.map(s => s.my), releaseIdx }
     };

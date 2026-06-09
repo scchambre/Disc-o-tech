@@ -54,21 +54,26 @@
     </div>
   </div>
 
-  <div class="row" style="margin-top:16px">
+  <div class="row" style="margin-top:16px; align-items:center">
     <strong>Throws: <span id="count">0</span></strong>
+    <span class="muted" style="margin-left:14px">Throw line
+      <input id="throwLine" type="number" value="0" style="width:52px"> °
+      <button id="flipLine" title="opposite target (±180°)">↺ 180°</button></span>
     <span style="flex:1"></span>
     <button id="export">Export table CSV</button>
     <button id="exportRaw">Export raw CSV</button>
     <button id="clear">Clear</button>
   </div>
 
+  <div style="overflow-x:auto">
   <table>
     <thead><tr>
-      <th>throw</th><th>RPM</th><th>reach °</th><th>flight °</th><th>peak g</th>
+      <th>throw</th><th>RPM</th><th>reach °</th><th>flight °</th><th>lean (N)</th><th>vs line</th><th>peak g</th>
       <th>wobble&nbsp;°</th><th>rate Hz</th><th>⚠</th>
     </tr></thead>
     <tbody id="rows"></tbody>
   </table>
+  </div>
 
   <div class="row" style="margin-top:18px; align-items:center; gap:10px">
     <button id="connectBtFilter2">🎯 Connect micro:bit</button>
@@ -79,7 +84,9 @@
   <canvas id="magCanvas" width="940" height="200"></canvas>
   <p class="muted">Click a row to plot it. <b>reach °</b> = how the disc was tilted while held still in your reach-back.
      <b>flight °</b> = the disc's actual spin-axis tilt in the air (measured from the gravity wobble — the truer release angle; needs a real spin).
-     Both are total lean (hyzer + nose combined). <b>wobble °</b> = how far the spin wavers from perfectly steady (RMS degrees, sensor noise removed; lower = cleaner). RPM needs sample rate ≳ 2× spin frequency.</p>
+     Both are total lean (hyzer + nose combined). <b>lean (N)</b> = compass direction the disc tips toward (in flight).
+     <b>vs line</b> = that lean relative to your <b>Throw line</b> setting above (set it to your throwing direction; ↺180° for the opposite target).
+     <b>wobble °</b> = how far the spin wavers from perfectly steady (RMS degrees, sensor noise removed; lower = cleaner). RPM needs sample rate ≳ 2× spin frequency.</p>
 </main>
 
 <script src="metrics.js"></script>

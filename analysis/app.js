@@ -11,16 +11,23 @@
 
   // ---------- rendering ----------
   const fmt = (v, d = 0) => (v == null || isNaN(v)) ? '—' : (+v).toFixed(d);
+  const compass = d => ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'][Math.round((((d % 360) + 360) % 360) / 45) % 8];
+  const norm180 = d => (((d + 180) % 360) + 360) % 360 - 180;   // wrap to -180..180
+  const throwLineDeg = () => parseFloat(($('throwLine') || {}).value) || 0;
 
   function render() {
     const tb = $('rows'); tb.innerHTML = '';
+    const tl = throwLineDeg();
     results.forEach((r, i) => {
       const m = r.m;
+      const lean = m.flightLeanBearingDeg;
+      const cardCell = lean == null ? '—' : Math.round(lean) + '° ' + compass(lean);
+      const relCell = lean == null ? '—' : (norm180(lean - tl) > 0 ? '+' : '') + Math.round(norm180(lean - tl)) + '°';
       const tr = document.createElement('tr');
       tr.className = 'pick'; tr.onclick = () => plot(i);
       tr.innerHTML =
         `<td>${r.label}</td><td>${fmt(m.rpm)}</td><td>${fmt(m.releaseTiltDeg, 1)}</td>` +
-        `<td>${fmt(m.flightTiltDeg, 1)}</td><td>${fmt(m.peakG, 1)}</td>` +
+        `<td>${fmt(m.flightTiltDeg, 1)}</td><td>${cardCell}</td><td>${relCell}</td><td>${fmt(m.peakG, 1)}</td>` +
         `<td>${fmt(m.spinWobbleDeg, 1)}</td><td>${fmt(m.sampleRateHz, 0)}</td>` +
         `<td class="${m.warnings.length ? 'warn' : ''}">${m.warnings.length || ''}</td>`;
       tb.appendChild(tr);
@@ -207,14 +214,20 @@
   if ($('connectBtFilter')) $('connectBtFilter').addEventListener('click', () => pick(true));
   if ($('connectBtFilter2')) $('connectBtFilter2').addEventListener('click', () => pick(true));
   if ($('reconnectBt')) $('reconnectBt').addEventListener('click', reconnectBluetooth);
+  if ($('throwLine')) $('throwLine').addEventListener('input', render);
+  if ($('flipLine')) $('flipLine').addEventListener('click', () => {
+    const el = $('throwLine'); el.value = ((((parseFloat(el.value) || 0) + 180) % 360) + 360) % 360; render();
+  });
 
   // ---------- export ----------
   $('export').addEventListener('click', () => {
     if (!results.length) return;
-    const head = 'label,rpm,reach_tilt_deg,flight_tilt_deg,peak_g,spin_wobble_deg,sample_rate_hz,warnings';
+    const tl = throwLineDeg();
+    const head = 'label,rpm,reach_tilt_deg,flight_tilt_deg,lean_bearing_deg,lean_vs_throw_deg,peak_g,spin_wobble_deg,sample_rate_hz,warnings';
     const lines = results.map(r => {
-      const m = r.m;
+      const m = r.m, lean = m.flightLeanBearingDeg;
       return [r.label, fmt(m.rpm), fmt(m.releaseTiltDeg, 1), fmt(m.flightTiltDeg, 1),
+      (lean == null ? '' : fmt(lean, 0)), (lean == null ? '' : fmt(norm180(lean - tl), 0)),
       fmt(m.peakG, 1), fmt(m.spinWobbleDeg, 1), fmt(m.sampleRateHz, 0),
       '"' + m.warnings.join(' | ') + '"'].join(',');
     });
