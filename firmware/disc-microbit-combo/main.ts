@@ -20,7 +20,8 @@ bluetooth.startUartService()
 
 // ---- tuning ----
 const RING = 250         // samples kept in the rolling buffer (~5 s at ~50 Hz). Raise for a longer run-up.
-const SAMPLE_PAUSE = 15  // ~50 Hz — plenty for run-up / x-step body motion
+const SAMPLE_PAUSE = 5   // smaller = faster sampling (higher RPM ceiling) UNTIL the magnetometer's
+                         // own refresh rate caps it. Watch "rate Hz" in the analyzer to see what you get.
 const POST_MS = 1000     // keep recording this long AFTER the throw spike (flight)
 const TRIGGER_MG = 2600  // throw detection (~2.6 g). Lower toward 1800 for gentle tosses.
 const STILL_MG = 1300    // "still" threshold (gravity reference + re-arm)
