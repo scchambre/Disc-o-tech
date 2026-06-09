@@ -100,30 +100,50 @@
   }
 
   async function connect() {
-    if (!('serial' in navigator)) { alert('Web Serial needs Chrome or Edge (and https:// or file://).'); return; }
+    if (!('serial' in navigator)) { alert('Web Serial needs Chrome or Edge.'); return; }
     try {
       port = await navigator.serial.requestPort();
       await port.open({ baudRate: 115200 });
-      resetStream();
-      $('connect').textContent = 'Disconnect';
-      keepReading = true;
-      const dec = new TextDecoderStream();
-      port.readable.pipeTo(dec.writable).catch(() => { });
-      reader = dec.readable.getReader();
-      let buf = '';
-      while (keepReading) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        buf += value;
-        let nl; while ((nl = buf.indexOf('\n')) >= 0) { feedLine(buf.slice(0, nl)); buf = buf.slice(nl + 1); }
+    } catch (e) {
+      console.error(e);
+      alert('Could not open the port. If you just refreshed the page, unplug and replug the base station, then try Connect again.');
+      return;
+    }
+    resetStream();
+    $('connect').textContent = 'Disconnect';
+    keepReading = true;
+    const decoder = new TextDecoder();
+    let buf = '';
+    // Resilient read loop: re-acquire the reader if a read errors (a USB hiccup
+    // used to kill the old pipeTo loop permanently), and never let one bad line
+    // stop the stream — that's why only the first throw used to come through.
+    while (port && port.readable && keepReading) {
+      reader = port.readable.getReader();
+      try {
+        while (keepReading) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          buf += decoder.decode(value, { stream: true });
+          let nl;
+          while ((nl = buf.indexOf('\n')) >= 0) {
+            const line = buf.slice(0, nl); buf = buf.slice(nl + 1);
+            try { feedLine(line); } catch (err) { console.error('parse error (skipped)', err); }
+          }
+        }
+      } catch (e) {
+        console.error('serial read error — re-acquiring', e);
+      } finally {
+        try { reader.releaseLock(); } catch (e) { }
       }
-    } catch (e) { console.error(e); }
+    }
   }
   async function disconnect() {
     keepReading = false;
     try { if (reader) await reader.cancel(); } catch (e) { }
+    try { if (reader) reader.releaseLock(); } catch (e) { }
     try { if (port) await port.close(); } catch (e) { }
-    $('connect').textContent = 'Connect base station';
+    port = null;
+    $('connect').textContent = 'USB base station (2 boards)';
   }
   $('connect').addEventListener('click', () => (keepReading ? disconnect() : connect()));
 
