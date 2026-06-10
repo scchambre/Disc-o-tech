@@ -55,13 +55,23 @@
     }).join('');
   }
 
-  function addThrow(throwObj, label) {
-    results.push({ label, m: analyzeThrow(throwObj) });
+  function addThrow(throwObj, label, text) {
+    results.push({ label, m: analyzeThrow(throwObj), text: text || '' });
     render();
   }
 
   $('metric').addEventListener('change', e => { metric = e.target.value; render(); });
   $('reset').addEventListener('click', () => { results.length = 0; render(); });
+  // Export every throw as a re-loadable stream file (includes the gravity reference) —
+  // drop it back onto the main analyzer, or send it for diagnosis.
+  $('export').addEventListener('click', () => {
+    if (!results.length) return;
+    const text = results.map(r => r.text).filter(Boolean).join('\n') + '\n';
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([text], { type: 'text/csv' }));
+    a.download = 'disc-o-tech-kiosk-' + new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-') + '.csv';
+    a.click();
+  });
 
   // ---------- live stream parsing (same protocol as the main analyzer) ----------
   let header = null, curLines = [], curMarker = null, capturing = false;
@@ -79,7 +89,7 @@
   // Mirror live throws across open tabs (kiosk + table at once). One tab connects and
   // broadcasts; others display. Same-origin only — use the https Pages URL for both tabs.
   const bc = (typeof BroadcastChannel !== 'undefined') ? new BroadcastChannel('disc-o-tech-live') : null;
-  if (bc) bc.onmessage = e => { try { const t = parseThrows(e.data.text)[0]; if (t) addThrow(t, e.data.label); } catch (_) { } };
+  if (bc) bc.onmessage = e => { try { const t = parseThrows(e.data.text)[0]; if (t) addThrow(t, e.data.label, e.data.text); } catch (_) { } };
 
   function flush() {
     if (!curLines.length) { capturing = false; return; }
@@ -87,7 +97,7 @@
     const t = parseThrows(text)[0];
     if (t) {
       const label = 'live ' + new Date().toLocaleTimeString();
-      addThrow(t, label);
+      addThrow(t, label, text);
       if (bc) bc.postMessage({ text, label });
     }
     curLines = []; capturing = false;
