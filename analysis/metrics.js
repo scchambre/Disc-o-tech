@@ -169,11 +169,11 @@
       : 1000 * (n - 1) / durationMs;
     const total = samples.map(s => (s.total != null ? s.total : Math.hypot(s.x, s.y, s.z)));
 
-    // release = biggest acceleration spike
-    let releaseIdx = 0, peak = -Infinity;
-    for (let i = 0; i < n; i++) if (total[i] > peak) { peak = total[i]; releaseIdx = i; }
+    // peak G = the single strongest spike (the metric)
+    let peak = -Infinity, peakIdx = 0;
+    for (let i = 0; i < n; i++) if (total[i] > peak) { peak = total[i]; peakIdx = i; }
 
-    // gravity reference -> g-scale + release tilt
+    // gravity reference -> g-scale + reach-back tilt
     const grav = throwObj.gravityRef || gravityFromData(samples, total);
     let gScale = 1000, releaseTiltDeg = null, releaseTiltDirDeg = null;
     if (grav) {
@@ -188,21 +188,34 @@
     }
     const peakG = peak / gScale;
 
-    // Spin metrics from the magnetometer phase, over the STEADY FLIGHT region.
-    // Tolerate dropped samples (Bluetooth loss), and skip the release spike / spin-up
-    // so RPM, wobble and flight-tilt all reflect steady flight — not the throw itself.
+    // RELEASE = the FIRST big spike (the throw), NOT the global max. A net impact is
+    // often a BIGGER spike than the throw and comes LATER, so picking the max would make
+    // us measure the post-impact tumble. FLIGHT = the calm window from just after the
+    // release spike up to the NEXT spike (e.g. hitting the net) — the clean mid-air spin.
+    const SPIKE = 2.5 * gScale;
+    let releaseIdx = peakIdx;
+    for (let i = 0; i < n; i++) if (total[i] > SPIKE) { releaseIdx = i; break; }
+    // After the release spike, take the LONGEST calm (flight-like) run — this excludes the
+    // release spike, the net impact, AND any post-impact tumble, leaving the clean mid-air
+    // flight even when there are several bumps.
+    let after = releaseIdx;
+    while (after < n && total[after] > SPIKE) after++;        // first sample past the release spike
+    let fStart = after, fEnd = after, bestLen = 0, curStart = after, curLen = 0;
+    for (let i = after; i < n; i++) {
+      if (total[i] <= SPIKE) {
+        if (curLen === 0) curStart = i;
+        curLen++;
+        if (curLen > bestLen) { bestLen = curLen; fStart = curStart; fEnd = i + 1; }
+      } else curLen = 0;
+    }
+
+    // Spin metrics from the magnetometer phase, over that clean flight window. Tolerate
+    // dropped samples (link loss) by using only samples with valid mx,my,x,y.
     let rpm = null, spinWobbleDeg = null, flightTiltDeg = null, flightLeanBearingDeg = null;
-    const segAll = samples.slice(releaseIdx);
-    let seg = segAll.filter(s => s.mx != null && s.my != null && !isNaN(s.mx) && !isNaN(s.my) &&
+    const segAll = samples.slice(fStart, fEnd);
+    const seg = segAll.filter(s => s.mx != null && s.my != null && !isNaN(s.mx) && !isNaN(s.my) &&
       s.x != null && s.y != null && !isNaN(s.x) && !isNaN(s.y));
     const droppedMag = segAll.length - seg.length;
-    {
-      // drop leading samples whose acceleration is still well above gravity (the throw)
-      const totOf = s => (s.total != null ? s.total : Math.hypot(s.x, s.y, s.z));
-      let sf = 0;
-      while (sf < seg.length && totOf(seg[sf]) > 2.5 * gScale) sf++;
-      seg = seg.slice(sf);
-    }
     if (seg.length < 8) {
       warnings.push('Too few clean flight samples to read spin (' + seg.length + ' usable' +
         (droppedMag ? ', ' + droppedMag + ' missing — link dropping data' : '') + ').');
