@@ -173,13 +173,18 @@
     let peak = -Infinity, peakIdx = 0;
     for (let i = 0; i < n; i++) if (total[i] > peak) { peak = total[i]; peakIdx = i; }
 
-    // gravity reference -> g-scale + reach-back tilt
+    // FIXED g-scale: the micro:bit reads ~1024 milli-g per 1 g. Do NOT derive the scale
+    // from the gravity reference — that's sampled whenever the disc is below ~1.3 g, which
+    // includes mid-handling and near-free-fall, so its magnitude can be far from 1 g and
+    // would wildly inflate peak-g (a near-free-fall gref of ~50 turned 13,000 into "266 g").
+    const gScale = 1024;
     const grav = throwObj.gravityRef || gravityFromData(samples, total);
-    let gScale = 1000, releaseTiltDeg = null, releaseTiltDirDeg = null;
+    let releaseTiltDeg = null, releaseTiltDirDeg = null;
     if (grav) {
       const gmag = Math.hypot(grav.x, grav.y, grav.z);
       if (gmag > 1) {
-        gScale = gmag;
+        // tilt = the reference vector's angle from vertical — a ratio, so only its
+        // direction matters (its magnitude cancels out)
         releaseTiltDeg = Math.acos(Math.min(1, Math.abs(grav.z) / gmag)) * 180 / Math.PI;
         releaseTiltDirDeg = Math.atan2(grav.y, grav.x) * 180 / Math.PI;
       }
