@@ -76,10 +76,20 @@
     if (line.split(',').some(c => isNaN(parseFloat(c)))) { header = line; return; }
     if (capturing) curLines.push(line);
   }
+  // Mirror live throws across open tabs (kiosk + table at once). One tab connects and
+  // broadcasts; others display. Same-origin only — use the https Pages URL for both tabs.
+  const bc = (typeof BroadcastChannel !== 'undefined') ? new BroadcastChannel('disc-o-tech-live') : null;
+  if (bc) bc.onmessage = e => { try { const t = parseThrows(e.data.text)[0]; if (t) addThrow(t, e.data.label); } catch (_) { } };
+
   function flush() {
     if (!curLines.length) { capturing = false; return; }
-    const t = parseThrows([curMarker, header, ...curLines].filter(Boolean).join('\n'))[0];
-    if (t) addThrow(t, 'live ' + new Date().toLocaleTimeString());
+    const text = [curMarker, header, ...curLines].filter(Boolean).join('\n');
+    const t = parseThrows(text)[0];
+    if (t) {
+      const label = 'live ' + new Date().toLocaleTimeString();
+      addThrow(t, label);
+      if (bc) bc.postMessage({ text, label });
+    }
     curLines = []; capturing = false;
   }
   const status = m => { $('status').textContent = m; };

@@ -91,11 +91,21 @@
     if (looksHeader) { header = line; return; }
     if (capturing) curLines.push(line);
   }
+  // Mirror live throws to other open tabs (e.g. kiosk on a projector + this table on a
+  // laptop, both live). One tab holds the connection and broadcasts; others just display.
+  // Cross-tab messaging is same-origin — use the https GitHub Pages URL for both tabs.
+  const bc = (typeof BroadcastChannel !== 'undefined') ? new BroadcastChannel('disc-o-tech-live') : null;
+  if (bc) bc.onmessage = e => { try { const t = parseThrows(e.data.text)[0]; if (t) addThrow(t, e.data.label); } catch (_) { } };
+
   function flush() {
     if (!curLines.length) { capturing = false; return; }
     const text = [curMarker, header, ...curLines].filter(Boolean).join('\n');
     const t = parseThrows(text)[0];
-    if (t) addThrow(t, 'live ' + new Date().toLocaleTimeString());
+    if (t) {
+      const label = 'live ' + new Date().toLocaleTimeString();
+      addThrow(t, label);
+      if (bc) bc.postMessage({ text, label });
+    }
     curLines = []; capturing = false;
   }
 
