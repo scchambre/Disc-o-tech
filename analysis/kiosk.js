@@ -6,59 +6,77 @@
   const { parseThrows, analyzeThrow } = window.DiscMetrics;
   const $ = id => document.getElementById(id);
 
-  const results = [];                 // { label, m }
-  let metric = 'power';               // 'power' (peak g) or 'rpm'
+  const results = [];                 // { label, m, text }
+  let metric = 'power';
+  let selectedIdx = null;             // which throw's graphs to show (null = follow newest)
 
-  // ---------- metric helpers ----------
-  const metricVal = m => metric === 'power' ? m.peakG : m.rpm;     // may be null for rpm
-  const unit = () => metric === 'power' ? 'g' : 'RPM';
-  const fmtVal = v => (v == null || isNaN(v)) ? '—' : (metric === 'power' ? v.toFixed(1) : Math.round(v).toString());
+  // ---------- metric config (lower:true means smaller is better — flattest/cleanest) ----------
+  const METRICS = {
+    power: { get: m => m.peakG,         unit: 'g',   lower: false, dp: 1 },
+    rpm:   { get: m => m.rpm,           unit: 'RPM', lower: false, dp: 0 },
+    flat:  { get: m => m.flightTiltDeg, unit: '°',   lower: true,  dp: 0 },
+    clean: { get: m => m.spinWobbleDeg, unit: '°',   lower: true,  dp: 0 },
+  };
+  const M = () => METRICS[metric];
+  const metricVal = m => M().get(m);
+  const unit = () => M().unit;
+  const fmtVal = v => (v == null || isNaN(v)) ? '—' : (+v).toFixed(M().dp);
+  function bestVal() {
+    let best = null;
+    results.forEach(r => { const x = metricVal(r.m); if (x == null || isNaN(x)) return; if (best == null || (M().lower ? x < best : x > best)) best = x; });
+    return best;
+  }
 
   // ---------- render ----------
   function render() {
-    const latest = results[results.length - 1];
-    // graphs of the newest throw
-    if (latest && latest.m.series && latest.m.series.tms.length) {
-      const s = latest.m.series, t = s.tms, relX = t.length ? t[s.releaseIdx] : null;
+    const viewIdx = (selectedIdx != null && selectedIdx >= 0 && selectedIdx < results.length) ? selectedIdx : results.length - 1;
+    const view = results[viewIdx];
+    // graphs of the VIEWED throw (newest by default, or a past one you clicked)
+    if (view && view.m.series && view.m.series.tms.length) {
+      const s = view.m.series, t = s.tms, relX = t.length ? t[s.releaseIdx] : null;
       window.DiscPlot.draw($('accCanvas'), [{ xs: t, ys: s.total, color: '#4fa3ff', label: 'power' }],
         { title: 'acceleration', xlabel: 'ms', releaseX: relX });
       window.DiscPlot.draw($('magCanvas'),
         [{ xs: t, ys: s.mx, color: '#ff7a59', label: 'spin X' }, { xs: t, ys: s.my, color: '#5fd38b', label: 'spin Y' }],
         { title: 'spin', xlabel: 'ms', releaseX: relX });
     }
-    // hero number = newest throw's metric
-    const v = latest ? metricVal(latest.m) : null;
+    const v = view ? metricVal(view.m) : null;
     $('big').textContent = fmtVal(v);
     $('unit').textContent = unit();
-    // bonus line: show the OTHER metric of the newest throw
-    if (latest) {
-      const rpm = latest.m.rpm, pk = latest.m.peakG;
-      $('sub').textContent = metric === 'power'
-        ? (rpm != null ? 'spin ' + Math.round(rpm) + ' RPM' : 'spin: too wobbly to read')
-        : (pk != null ? 'power ' + pk.toFixed(1) + ' g' : '');
+    if (view) {
+      const m = view.m, parts = [];
+      if (m.peakG != null) parts.push('power ' + m.peakG.toFixed(1) + 'g');
+      if (m.rpm != null) parts.push('spin ' + Math.round(m.rpm) + ' RPM');
+      if (m.flightTiltDeg != null) parts.push('flight ' + m.flightTiltDeg.toFixed(0) + '°');
+      if (m.spinWobbleDeg != null) parts.push('wobble ' + m.spinWobbleDeg.toFixed(0) + '°');
+      $('sub').textContent = parts.join('  ·  ');
     } else $('sub').textContent = '';
-    // session best
-    let best = -Infinity;
-    results.forEach(r => { const x = metricVal(r.m); if (x != null && x > best) best = x; });
-    $('best').textContent = isFinite(best) ? '🏆 best: ' + fmtVal(best) + ' ' + unit() : '🏆 best: —';
-    // ranked? no — list is newest-first so the newest + graph stay at the top without scrolling,
-    // and we highlight whichever row is the current best.
+    const best = bestVal();
+    $('best').textContent = best != null ? '🏆 best: ' + fmtVal(best) + ' ' + unit() : '🏆 best: —';
     const rows = results.map((r, i) => ({ r, i })).reverse();
     $('list').innerHTML = rows.map(({ r, i }) => {
       const x = metricVal(r.m);
-      const win = x != null && x === best;
+      const win = x != null && best != null && x === best;
+      const sel = i === viewIdx;
       const time = (r.label || '').replace(/^live /, '');
-      return `<div class="item ${win ? 'win' : ''}">` +
+      return `<div class="item ${win ? 'win' : ''} ${sel ? 'sel' : ''}" data-i="${i}">` +
         `<span class="rank">#${i + 1}</span>` +
         `<span class="val">${fmtVal(x)} <span class="muted" style="font-size:14px">${unit()}</span></span>` +
-        `<span class="meta">${time}${win ? '  · 🏆 best' : ''}</span></div>`;
+        `<span class="meta">${time}${win ? '  · 🏆' : ''}${sel ? '  · viewing' : ''}</span></div>`;
     }).join('');
   }
 
   function addThrow(throwObj, label, text) {
     results.push({ label, m: analyzeThrow(throwObj), text: text || '' });
+    selectedIdx = null;     // a fresh throw becomes the focus
     render();
   }
+
+  // click a row to view that throw's graphs (until the next throw arrives)
+  $('list').addEventListener('click', e => {
+    const item = e.target.closest('.item');
+    if (item && item.dataset.i != null) { selectedIdx = +item.dataset.i; render(); }
+  });
 
   $('metric').addEventListener('change', e => { metric = e.target.value; render(); });
   $('reset').addEventListener('click', () => { results.length = 0; render(); });

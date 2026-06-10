@@ -27,12 +27,14 @@
                 background: #1f2a1a; color: #b9e08a; font-weight: 700; font-size: 18px; }
   .list { flex: 1; overflow-y: auto; padding: 0 16px 16px; }
   .item { display: flex; align-items: baseline; gap: 12px; padding: 9px 12px; border-bottom: 1px solid #161d26;
-          font-variant-numeric: tabular-nums; }
+          font-variant-numeric: tabular-nums; cursor: pointer; }
+  .item:hover { background: #131a23; }
   .item .rank { width: 30px; color: #66798a; font-weight: 700; }
   .item .val { font-size: 26px; font-weight: 800; width: 130px; }
   .item .meta { color: #8a97a5; font-size: 14px; }
   .item.win { background: linear-gradient(90deg,#1f2a1a,transparent); }
   .item.win .val { color: #b9e08a; }
+  .item.sel { outline: 2px solid #4fa3ff; outline-offset: -2px; border-radius: 6px; }
   .muted { color: #66798a; }
 </style>
 </head>
@@ -42,8 +44,10 @@
     <span class="sp"></span>
     <span id="status">not connected</span>
     <select id="metric" title="what to rank by">
-      <option value="power">Rank: POWER (g)</option>
-      <option value="rpm">Rank: SPIN (RPM)</option>
+      <option value="power">Rank: POWER — max g</option>
+      <option value="rpm">Rank: SPIN — max RPM</option>
+      <option value="flat">Rank: FLATTEST — min °</option>
+      <option value="clean">Rank: CLEANEST — min wobble</option>
     </select>
     <button id="connect">Connect (USB)</button>
     <button id="connectBt">Bluetooth</button>
