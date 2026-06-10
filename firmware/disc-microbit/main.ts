@@ -17,11 +17,13 @@
 radio.setGroup(7)
 radio.setTransmitPower(7)
 input.setAccelerometerRange(AcceleratorRange.EightG)   // don't clip the throw
+music.setVolume(255)                                   // MAX volume for a loud room
 
 // ---- tuning knobs ----
 const MAX_SAMPLES = 200      // RAM cap per throw
 const CAPTURE_MS = 1500      // how long to record after a throw fires
-const TRIGGER_MG = 2600      // strength that starts a capture (~2.6 g)
+const TRIGGER_MG = 3000      // strength that starts a capture (~3 g). Raised + de-bounced below
+                             // so handling/carrying the disc doesn't false-trigger.
 const STILL_MG = 1300        // below this counts as "still" (re-arm + gravity ref)
 const SAMPLE_PAUSE = 5       // smaller = faster sampling (higher RPM ceiling) until the magnetometer caps it
 
@@ -96,14 +98,18 @@ input.onButtonPressed(Button.A, function () {
 basic.forever(function () {
     const s = input.acceleration(Dimension.Strength)
     if (armed && s > TRIGGER_MG) {
-        armed = false
-        throwId += 1
-        captureThrow()
-        // wait until still again so picking the disc out of the net won't retrigger
-        while (input.acceleration(Dimension.Strength) > STILL_MG) basic.pause(50)
-        basic.pause(300)
-        armed = true
-        music.playTone(Note.E, 120)        // "ready" beep — safe to throw again
+        basic.pause(10)
+        if (input.acceleration(Dimension.Strength) > TRIGGER_MG) {   // still high 10ms later = a real throw, not a bump
+            armed = false
+            throwId += 1
+            captureThrow()
+            // wait until still again, but TIME OUT after 3 s so it can never get stuck un-armed
+            let waited = 0
+            while (input.acceleration(Dimension.Strength) > STILL_MG && waited < 3000) { basic.pause(50); waited += 50 }
+            basic.pause(300)
+            armed = true
+            music.playTone(Note.E, 120); basic.pause(70); music.playTone(Note.E, 120)   // 2 "ready" beeps
+        }
     } else if (armed) {
         led.plot(2, 2)                 // dim center dot = armed & waiting
         if (s < STILL_MG) {            // update gravity reference while still
