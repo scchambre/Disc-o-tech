@@ -17,14 +17,20 @@
 serial.setBaudRate(BaudRate.BaudRate115200)
 input.setAccelerometerRange(AcceleratorRange.EightG)
 bluetooth.startUartService()
+music.setVolume(255)     // MAX volume for a loud room
 
 // ---- tuning ----
-const RING = 250         // samples kept in the rolling buffer (~5 s at ~50 Hz). Raise for a longer run-up.
+const RING = 150         // samples per throw (~2 s at ~75 Hz). Smaller = faster Bluetooth dump
+                         // between throws, which matters most for a booth queue.
 const SAMPLE_PAUSE = 5   // smaller = faster sampling (higher RPM ceiling) UNTIL the magnetometer's
                          // own refresh rate caps it. Watch "rate Hz" in the analyzer to see what you get.
 const POST_MS = 1000     // keep recording this long AFTER the throw spike (flight)
-const TRIGGER_MG = 2600  // throw detection (~2.6 g). Lower toward 1800 for gentle tosses.
-const STILL_MG = 1300    // "still" threshold (gravity reference + re-arm)
+const TRIGGER_MG = 3000  // throw detection (~3 g), de-bounced below so handling doesn't false-trigger
+const STILL_MG = 1300    // below this counts as "still" (used to re-arm after a throw)
+// A valid gravity reading sits NEAR 1 g. Only sample the reference inside this band —
+// below it is free-fall and above it is mid-handling, and both point the wrong way.
+const GREF_LO = 900
+const GREF_HI = 1180
 const OUT_PAUSE = 30     // ms between Bluetooth lines. BLE is slow — keep at 30 for reliable wireless.
 
 // ---- rolling buffer (pre-allocated so we never allocate mid-throw) ----
@@ -73,10 +79,11 @@ function record(): number {
     rz[widx] = az
     rmx[widx] = input.magneticForce(Dimension.X)
     rmy[widx] = input.magneticForce(Dimension.Y)
-    if (ax * ax + ay * ay + az * az < STILL_MG * STILL_MG) { grx = ax; gry = ay; grz = az }
+    const mag = Math.sqrt(ax * ax + ay * ay + az * az)
+    if (mag > GREF_LO && mag < GREF_HI) { grx = ax; gry = ay; grz = az }   // only when it IS ~1 g
     widx = (widx + 1) % RING
     if (filled < RING) filled += 1
-    return Math.sqrt(ax * ax + ay * ay + az * az)
+    return mag
 }
 
 function dumpRing() {
@@ -101,14 +108,19 @@ input.onButtonPressed(Button.A, function () { dumpRing() })
 basic.forever(function () {
     const s = record()
     if (armed && s > TRIGGER_MG) {
-        armed = false
-        const tEnd = input.runningTime() + POST_MS
-        while (input.runningTime() < tEnd) { record(); basic.pause(SAMPLE_PAUSE) }
-        dumpRing()
-        while (input.acceleration(Dimension.Strength) > STILL_MG) basic.pause(50)  // wait until still
-        basic.pause(300)
-        armed = true
-        music.playTone(Note.E, 120)        // "ready" beep — safe to throw again
+        basic.pause(10)
+        if (input.acceleration(Dimension.Strength) > TRIGGER_MG) {   // still high 10ms later = a real throw, not a bump
+            armed = false
+            const tEnd = input.runningTime() + POST_MS
+            while (input.runningTime() < tEnd) { record(); basic.pause(SAMPLE_PAUSE) }
+            dumpRing()
+            // wait until still again, but TIME OUT after 3 s so it can never get stuck un-armed
+            let waited = 0
+            while (input.acceleration(Dimension.Strength) > STILL_MG && waited < 3000) { basic.pause(50); waited += 50 }
+            basic.pause(300)
+            armed = true
+            music.playTone(Note.E, 120); basic.pause(70); music.playTone(Note.E, 120)   // 2 "ready" beeps
+        }
     } else if (armed) {
         if (connected) led.plot(2, 2)
         else { led.plot(0, 0); led.plot(4, 0) }

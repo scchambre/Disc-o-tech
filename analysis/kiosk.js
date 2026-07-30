@@ -79,7 +79,7 @@
   });
 
   $('metric').addEventListener('change', e => { metric = e.target.value; render(); });
-  $('reset').addEventListener('click', () => { results.length = 0; render(); });
+  $('reset').addEventListener('click', () => { results.length = 0; selectedIdx = null; render(); });
   // Export every throw as a re-loadable stream file (includes the gravity reference) —
   // drop it back onto the main analyzer, or send it for diagnosis.
   $('export').addEventListener('click', () => {

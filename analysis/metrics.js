@@ -131,16 +131,31 @@
   }
 
   // ---------- gravity reference (release-angle baseline) ----------
-  // Find the quietest run of accel samples (disc nearly still) and average it.
-  // Used only when the firmware didn't already supply a gravityRef.
+  // A VALID gravity reading must have a magnitude near 1 g. A vector captured in
+  // free-fall (|a| ~ 0) or mid-swing (|a| >> 1 g) points in a meaningless direction,
+  // so using it produces a garbage reach-back angle.
+  const G_MG = 1024;                       // micro:bit milli-g per 1 g
+  const G_LO = 0.86 * G_MG, G_HI = 1.16 * G_MG;
+  function isValidGravity(v) {
+    if (!v) return false;
+    const m = Math.hypot(v.x, v.y, v.z);
+    return m >= G_LO && m <= G_HI;
+  }
+
+  // Find the quietest run of accel samples that also SITS AT ~1 g (disc genuinely
+  // still, not falling), and average it.
   function gravityFromData(samples, total) {
     const n = total.length, W = Math.min(7, n);
     if (n < W) return null;
-    let bestVar = Infinity, bestI = 0;
+    let bestVar = Infinity, bestI = -1;
     for (let i = 0; i + W <= n; i++) {
-      const v = variance(total.slice(i, i + W));
+      const win = total.slice(i, i + W);
+      const m = mean(win);
+      if (m < G_LO || m > G_HI) continue;   // free-fall or mid-throw — not gravity
+      const v = variance(win);
       if (v < bestVar) { bestVar = v; bestI = i; }
     }
+    if (bestI < 0) return null;
     const seg = samples.slice(bestI, bestI + W);
     return { x: mean(seg.map(s => s.x)), y: mean(seg.map(s => s.y)), z: mean(seg.map(s => s.z)) };
   }
@@ -150,7 +165,20 @@
     const throwObj = Array.isArray(input) ? { samples: input, gravityRef: null } : input;
     const warnings = [];
     const raw = throwObj.samples || [];
-    if (raw.length < 8) return { ok: false, warnings: ['Too few samples (' + raw.length + ')'], series: emptySeries() };
+    if (raw.length < 8) {
+      // Still report peak-g from whatever arrived — a short/partial capture should show a
+      // power number rather than a blank, which matters when someone is watching a booth.
+      let pk = 0;
+      raw.forEach(s => {
+        const t = (s.total != null) ? s.total : Math.hypot(s.x || 0, s.y || 0, s.z || 0);
+        if (t > pk) pk = t;
+      });
+      return {
+        ok: false, n: raw.length, peakG: raw.length ? pk / G_MG : null,
+        warnings: ['Partial capture (' + raw.length + ' samples) — power only, no spin/angles.'],
+        series: emptySeries()
+      };
+    }
 
     // Sort by timestamp so out-of-order or corrupted rows (flaky Bluetooth) can't
     // produce negative durations / sample rates.
@@ -177,19 +205,22 @@
     // from the gravity reference — that's sampled whenever the disc is below ~1.3 g, which
     // includes mid-handling and near-free-fall, so its magnitude can be far from 1 g and
     // would wildly inflate peak-g (a near-free-fall gref of ~50 turned 13,000 into "266 g").
-    const gScale = 1024;
-    const grav = throwObj.gravityRef || gravityFromData(samples, total);
+    const gScale = G_MG;
+    // Trust the firmware's reference ONLY if it looks like real gravity (~1 g). It is
+    // sampled whenever |a| is below a threshold, which also catches free-fall and
+    // mid-handling, so ~60% of captures carried a bogus direction. Fall back to a
+    // validated still window in the data itself.
+    let grav = isValidGravity(throwObj.gravityRef) ? throwObj.gravityRef : null;
+    if (!grav) grav = gravityFromData(samples, total);
     let releaseTiltDeg = null, releaseTiltDirDeg = null;
     if (grav) {
       const gmag = Math.hypot(grav.x, grav.y, grav.z);
-      if (gmag > 1) {
-        // tilt = the reference vector's angle from vertical — a ratio, so only its
-        // direction matters (its magnitude cancels out)
-        releaseTiltDeg = Math.acos(Math.min(1, Math.abs(grav.z) / gmag)) * 180 / Math.PI;
-        releaseTiltDirDeg = Math.atan2(grav.y, grav.x) * 180 / Math.PI;
-      }
+      // tilt = the reference vector's angle from vertical — a ratio, so only its
+      // direction matters (its magnitude cancels out)
+      releaseTiltDeg = Math.acos(Math.min(1, Math.abs(grav.z) / gmag)) * 180 / Math.PI;
+      releaseTiltDirDeg = Math.atan2(grav.y, grav.x) * 180 / Math.PI;
     } else {
-      warnings.push('No still window found — release angle unavailable.');
+      warnings.push('No valid still (1 g) window — reach-back angle unavailable.');
     }
     const peakG = peak / gScale;
 

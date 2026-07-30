@@ -24,7 +24,11 @@ const MAX_SAMPLES = 200      // RAM cap per throw
 const CAPTURE_MS = 1500      // how long to record after a throw fires
 const TRIGGER_MG = 3000      // strength that starts a capture (~3 g). Raised + de-bounced below
                              // so handling/carrying the disc doesn't false-trigger.
-const STILL_MG = 1300        // below this counts as "still" (re-arm + gravity ref)
+const STILL_MG = 1300        // below this counts as "still" (used to re-arm after a throw)
+// A valid gravity reading sits NEAR 1 g. Only sample the reference inside this band —
+// below it is free-fall and above it is mid-handling, and both point the wrong way.
+const GREF_LO = 900
+const GREF_HI = 1180
 const SAMPLE_PAUSE = 5       // smaller = faster sampling (higher RPM ceiling) until the magnetometer caps it
 
 // ---- capture buffers ----
@@ -112,7 +116,7 @@ basic.forever(function () {
         }
     } else if (armed) {
         led.plot(2, 2)                 // dim center dot = armed & waiting
-        if (s < STILL_MG) {            // update gravity reference while still
+        if (s > GREF_LO && s < GREF_HI) {   // only sample gravity when it IS ~1 g
             grx = input.acceleration(Dimension.X)
             gry = input.acceleration(Dimension.Y)
             grz = input.acceleration(Dimension.Z)
