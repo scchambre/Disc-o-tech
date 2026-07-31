@@ -41,8 +41,9 @@
         { title: 'spin', xlabel: 'ms', releaseX: relX });
     }
     const v = view ? metricVal(view.m) : null;
-    $('big').textContent = fmtVal(v);
-    $('unit').textContent = unit();
+    // Idle state is what a passer-by sees first — invite them instead of showing a dash.
+    $('big').textContent = results.length ? fmtVal(v) : 'READY';
+    $('unit').textContent = results.length ? unit() : '';
     if (view) {
       const m = view.m, parts = [];
       if (m.peakG != null) parts.push('power ' + m.peakG.toFixed(1) + 'g');
@@ -50,7 +51,7 @@
       if (m.flightTiltDeg != null) parts.push('flight ' + m.flightTiltDeg.toFixed(0) + '°');
       if (m.spinWobbleDeg != null) parts.push('wobble ' + m.spinWobbleDeg.toFixed(0) + '°');
       $('sub').textContent = parts.join('  ·  ');
-    } else $('sub').textContent = '';
+    } else $('sub').textContent = 'connect the micro:bit, then throw';
     const best = bestVal();
     $('best').textContent = best != null ? '🏆 best: ' + fmtVal(best) + ' ' + unit() : '🏆 best: —';
     const rows = results.map((r, i) => ({ r, i })).reverse();
