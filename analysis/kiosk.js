@@ -5,6 +5,12 @@
   'use strict';
   const { parseThrows, analyzeThrow } = window.DiscMetrics;
   const $ = id => document.getElementById(id);
+  // Series colours come from CSS custom properties so a themed page (e.g. RIBUT-2026)
+  // restyles the charts; falls back to the default palette when unset.
+  const themeVar = (name, fallback) => {
+    try { return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback; }
+    catch (e) { return fallback; }
+  };
 
   const results = [];                 // { label, m, text }
   let metric = 'power';
@@ -34,10 +40,12 @@
     // graphs of the VIEWED throw (newest by default, or a past one you clicked)
     if (view && view.m.series && view.m.series.tms.length) {
       const s = view.m.series, t = s.tms, relX = t.length ? t[s.releaseIdx] : null;
-      window.DiscPlot.draw($('accCanvas'), [{ xs: t, ys: s.total, color: '#4fa3ff', label: 'power' }],
+      window.DiscPlot.draw($('accCanvas'),
+        [{ xs: t, ys: s.total, color: themeVar('--series-1', '#4fa3ff'), label: 'power' }],
         { title: 'acceleration', xlabel: 'ms', releaseX: relX });
       window.DiscPlot.draw($('magCanvas'),
-        [{ xs: t, ys: s.mx, color: '#ff7a59', label: 'spin X' }, { xs: t, ys: s.my, color: '#5fd38b', label: 'spin Y' }],
+        [{ xs: t, ys: s.mx, color: themeVar('--series-2', '#ff7a59'), label: 'spin X' },
+         { xs: t, ys: s.my, color: themeVar('--series-3', '#5fd38b'), label: 'spin Y' }],
         { title: 'spin', xlabel: 'ms', releaseX: relX });
     }
     const v = view ? metricVal(view.m) : null;

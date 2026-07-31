@@ -6,19 +6,23 @@
 <title>RIBUT 2026 · Disc-o-tech</title>
 <style>
 /* =============================================================
-   BRANDING — the only part you need to edit to match the theme.
-   1. Drop the logo in this folder as  assets/logo.png
-      (transparent PNG or SVG; if it's missing the wordmark below shows instead)
-   2. Replace the 5 colours with the design's hex codes.
+   BRANDING — sampled from the RIBUT 2026 Player Guide artwork.
+   Logo: assets/logo.png (falls back to a text wordmark if missing).
    ============================================================= */
 :root {
-  --brand:      #4fa3ff;   /* main accent: big numbers, highlights   */
-  --brand-2:    #b9e08a;   /* secondary accent: the winning score    */
-  --bg:         #0b0e13;   /* page background                        */
-  --panel:      #11161d;   /* cards / bars                           */
-  --text:       #eef3f8;   /* main text                              */
-  --muted:      #8a97a5;   /* labels, secondary text                 */
-  --event-name: "RIBUT 2026";
+  --brand:    #E06A2C;   /* lighthouse rust — big numbers, highlights
+                            (the badge's #BE501E, lifted for legibility on navy) */
+  --brand-2:  #DCAA64;   /* PEI sand/gold — the winning score        */
+  --bg:       #0E2330;   /* deep navy, a shade under the badge navy  */
+  --panel:    #142F3B;   /* brand navy, straight from the cover      */
+  --text:     #F0ECD9;   /* badge cream                              */
+  --muted:    #96B4B4;   /* sea-mist teal from the logo              */
+  /* graph colours (picked up by plot.js / kiosk.js) */
+  --plot-bg:  #0A1C27;
+  --series-1: #E06A2C;   /* acceleration / power */
+  --series-2: #DCAA64;   /* spin X               */
+  --series-3: #7FB3B8;   /* spin Y               */
+  --grid:     #24404E;
 }
 /* ============================================================= */
 
@@ -28,11 +32,16 @@
          display: flex; flex-direction: column; overflow: hidden; }
 
   /* ---- header / branding ---- */
-  .bar { display: flex; align-items: center; gap: 14px; padding: 10px 18px;
+  .bar { display: flex; align-items: center; gap: 12px; padding: 10px 18px; flex-wrap: wrap;
          background: var(--panel); border-bottom: 2px solid var(--brand); flex: none; }
-  #logo { height: 40px; width: auto; display: block; }
+  #logo { height: 52px; width: auto; display: block; }
   .wordmark { font-size: 20px; font-weight: 800; letter-spacing: .06em; color: var(--brand); }
   .wordmark .sub { color: var(--muted); font-weight: 600; font-size: 13px; letter-spacing: .04em; }
+  .title { font-size: 19px; font-weight: 800; letter-spacing: .06em; color: var(--text);
+           line-height: 1.15; white-space: nowrap; }
+  .title span { display: block; font-size: 12px; font-weight: 600; letter-spacing: .1em;
+                color: var(--brand); white-space: nowrap; }
+  #status { white-space: nowrap; }
   .bar .sp { flex: 1; }
   button, select { background: transparent; color: var(--text); border: 1px solid #2c3744;
                    border-radius: 8px; padding: 9px 13px; font: inherit; cursor: pointer; }
@@ -70,9 +79,10 @@
 </head>
 <body>
   <div class="bar">
-    <img id="logo" src="assets/logo.png" alt=""
+    <img id="logo" src="assets/logo.png" alt="Red Island Beach Ultimate Tournament"
          onerror="this.style.display='none';document.getElementById('wm').style.display='block'">
     <div id="wm" class="wordmark" style="display:none">RIBUT 2026<div class="sub">DISC-O-TECH</div></div>
+    <div class="title">RIBUT 2026<span>DISC-O-TECH · THROW TRACKER</span></div>
     <span class="sp"></span>
     <span id="status">not connected</span>
     <select id="metric" title="what to rank by">
