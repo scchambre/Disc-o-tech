@@ -6,7 +6,8 @@
   "bin": { "disc-o-tech": "cli.js" },
   "scripts": {
     "analyze": "node cli.js",
-    "demo": "node cli.js ../data/sample-throw.csv"
+    "demo": "node cli.js ../data/sample-throw.csv",
+    "test": "node test.js"
   },
   "license": "MIT"
 }

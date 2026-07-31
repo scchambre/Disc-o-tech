@@ -197,9 +197,13 @@
       : 1000 * (n - 1) / durationMs;
     const total = samples.map(s => (s.total != null ? s.total : Math.hypot(s.x, s.y, s.z)));
 
-    // peak G = the single strongest spike (the metric)
+    // peak G = the single strongest spike (the metric). Only consider FINITE readings —
+    // a capture of all-corrupt values used to leave peak at -Infinity and report
+    // "-Infinity g" (this really happened over a flaky Bluetooth link).
     let peak = -Infinity, peakIdx = 0;
-    for (let i = 0; i < n; i++) if (total[i] > peak) { peak = total[i]; peakIdx = i; }
+    for (let i = 0; i < n; i++) if (isFinite(total[i]) && total[i] > peak) { peak = total[i]; peakIdx = i; }
+    const havePeak = isFinite(peak);
+    if (!havePeak) { peak = 0; peakIdx = 0; warnings.push('No usable acceleration values in this capture.'); }
 
     // FIXED g-scale: the micro:bit reads ~1024 milli-g per 1 g. Do NOT derive the scale
     // from the gravity reference — that's sampled whenever the disc is below ~1.3 g, which
@@ -222,7 +226,7 @@
     } else {
       warnings.push('No valid still (1 g) window — reach-back angle unavailable.');
     }
-    const peakG = peak / gScale;
+    const peakG = havePeak ? peak / gScale : null;
 
     // RELEASE = the FIRST big spike (the throw), NOT the global max. A net impact is
     // often a BIGGER spike than the throw and comes LATER, so picking the max would make
