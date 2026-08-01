@@ -20,11 +20,14 @@ bluetooth.startUartService()
 music.setVolume(255)     // MAX volume for a loud room
 
 // ---- tuning ----
-const RING = 150         // samples per throw (~2 s at ~75 Hz). Smaller = faster Bluetooth dump
-                         // between throws, which matters most for a booth queue.
+const RING = 90          // samples per throw. Keep this SMALL: the Bluetooth stack reserves a large
+                         // slice of RAM and dumping builds one string per sample, so an oversized
+                         // ring can exhaust memory mid-dump and panic the board.
 const SAMPLE_PAUSE = 5   // smaller = faster sampling (higher RPM ceiling) UNTIL the magnetometer's
                          // own refresh rate caps it. Watch "rate Hz" in the analyzer to see what you get.
-const POST_MS = 1000     // keep recording this long AFTER the throw spike (flight)
+const POST_MS = 500      // record this long AFTER the throw spike. MUST stay well under
+                         // RING * (actual ms per sample) (~90 x 8ms = 720ms), otherwise the post-throw
+                         // samples wrap the ring and overwrite the release spike the analyzer needs.
 const TRIGGER_MG = 3000  // throw detection (~3 g), de-bounced below so handling doesn't false-trigger
 const STILL_MG = 1300    // below this counts as "still" (used to re-arm after a throw)
 // A valid gravity reading sits NEAR 1 g. Only sample the reference inside this band —
@@ -77,8 +80,9 @@ function record(): number {
     rx[widx] = ax
     ry[widx] = ay
     rz[widx] = az
-    rmx[widx] = input.magneticForce(Dimension.X)
-    rmy[widx] = input.magneticForce(Dimension.Y)
+    // round the magnetometer: shorter strings at dump time = less memory churn
+    rmx[widx] = Math.round(input.magneticForce(Dimension.X))
+    rmy[widx] = Math.round(input.magneticForce(Dimension.Y))
     const mag = Math.sqrt(ax * ax + ay * ay + az * az)
     if (mag > GREF_LO && mag < GREF_HI) { grx = ax; gry = ay; grz = az }   // only when it IS ~1 g
     widx = (widx + 1) % RING
@@ -86,7 +90,11 @@ function record(): number {
     return mag
 }
 
+let dumping = false
+
 function dumpRing() {
+    if (dumping) return            // never re-enter (e.g. button A pressed mid-dump)
+    dumping = true
     basic.showIcon(IconNames.SmallDiamond)
     throwId += 1
     emit("# throw " + throwId + " gref=" + grx + "," + gry + "," + grz)
@@ -100,6 +108,7 @@ function dumpRing() {
     emit("# end")
     widx = 0; filled = 0        // clear the buffer so the next throw can't include stale samples
     basic.showIcon(IconNames.Yes); basic.pause(200); basic.clearScreen()
+    dumping = false
 }
 
 // Button A = dump the current buffer now (no throw needed).

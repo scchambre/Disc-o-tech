@@ -317,9 +317,16 @@
           flightLeanBearingDeg = circularMeanDeg(delta);
         }
 
-        if (sampleRateHz < 2.2 * (rpm / 60)) {
-          warnings.push('Sample rate ' + sampleRateHz.toFixed(0) + ' Hz too low for ' +
-            rpm.toFixed(0) + ' RPM — aliasing likely. Use an IMU with a gyro for drives.');
+        // Aliasing CANNOT be detected from the measured value — a too-fast spin folds down
+        // to a plausible-looking low number, so comparing the rate against the measured RPM
+        // is circular and never fires. Instead report the honest Nyquist ceiling.
+        const ceilingRpm = sampleRateHz * 30;      // (rate/2 rev/s) x 60
+        if (rpm > 0.8 * ceilingRpm) {
+          warnings.push('RPM is near this capture\'s ' + ceilingRpm.toFixed(0) +
+            ' RPM limit — it may be aliased and reading low.');
+        } else if (ceilingRpm < 1200) {
+          warnings.push('Sample rate ' + sampleRateHz.toFixed(0) + ' Hz can only measure spin up to ~' +
+            ceilingRpm.toFixed(0) + ' RPM; a faster throw reads falsely low. A gyro/IMU removes this limit.');
         }
       }
     }
