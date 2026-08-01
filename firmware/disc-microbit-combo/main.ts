@@ -17,7 +17,10 @@
 serial.setBaudRate(BaudRate.BaudRate115200)
 input.setAccelerometerRange(AcceleratorRange.EightG)
 bluetooth.startUartService()
-music.setVolume(255)     // MAX volume for a loud room
+// NOTE: no `music` in this build. The V2 speaker (PWM) and the Bluetooth soft device both
+// have hard real-time constraints, and driving tones while BLE is active panicked the board
+// mid-dump. Bluetooth worked reliably here BEFORE sound was added, and the sound code is
+// only proven on the radio build (no BLE). Feedback is LED-only — see the patterns below.
 
 // ---- tuning ----
 const RING = 90          // samples per throw. Keep this SMALL: the Bluetooth stack reserves a large
@@ -54,14 +57,11 @@ let connected = false
 
 bluetooth.onBluetoothConnected(function () {
     connected = true
-    music.playTone(Note.C, 150)        // rising two-note = connected
-    music.playTone(Note.G, 150)
-    basic.showIcon(IconNames.Yes); basic.pause(300); basic.clearScreen()
+    basic.showIcon(IconNames.Yes); basic.pause(400); basic.clearScreen()
 })
 bluetooth.onBluetoothDisconnected(function () {
     connected = false
-    music.playTone(Note.G, 150)        // falling two-note = disconnected
-    music.playTone(Note.C, 150)
+    basic.showIcon(IconNames.No); basic.pause(400); basic.clearScreen()
 })
 
 function emit(line: string) {
@@ -100,7 +100,11 @@ function dumpRing() {
     emit("# throw " + throwId + " gref=" + grx + "," + gry + "," + grz)
     emit("t,x,y,z,mx,my")
     const n = filled
+    const startedConnected = connected
     for (let k = 0; k < n; k++) {
+        // if the link drops mid-dump (disc thrown out of range), stop rather than keep
+        // writing into a dead connection
+        if (startedConnected && !connected) break
         const i = (((widx - n + k) % RING) + RING) % RING   // oldest -> newest
         emit(rt[i] + "," + rx[i] + "," + ry[i] + "," + rz[i] + "," + rmx[i] + "," + rmy[i])
         basic.pause(OUT_PAUSE)
@@ -128,7 +132,11 @@ basic.forever(function () {
             while (input.acceleration(Dimension.Strength) > STILL_MG && waited < 3000) { basic.pause(50); waited += 50 }
             basic.pause(300)
             armed = true
-            music.playTone(Note.E, 120); basic.pause(70); music.playTone(Note.E, 120)   // 2 "ready" beeps
+            // "ready" = a big bright tick, twice — visible across a room without sound
+            for (let b = 0; b < 2; b++) {
+                basic.showIcon(IconNames.Yes); basic.pause(160)
+                basic.clearScreen(); basic.pause(90)
+            }
         }
     } else if (armed) {
         if (connected) led.plot(2, 2)
