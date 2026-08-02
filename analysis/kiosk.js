@@ -160,19 +160,62 @@
   $('connect').addEventListener('click', () => keepReading ? disconnectSerial() : connectSerial());
 
   // ---------- Web Bluetooth (single-board build) ----------
+  // A hard throw can brown out the micro:bit (battery contact breaks under high g); the board
+  // reboots and the browser is left holding a dead GATT handle while still claiming
+  // "connected". So: listen for the drop and reconnect AUTOMATICALLY. Permission for this
+  // device is already granted for the session, so re-connecting needs no picker.
   const NUS = '6e400001-b5a3-f393-e0a9-e50e24dcca9e', NUS_TX = '6e400002-b5a3-f393-e0a9-e50e24dcca9e';
+  let btDevice = null, btWanted = false, btTries = 0;
+
+  async function subscribe(device) {
+    const server = await device.gatt.connect();
+    const ch = await (await server.getPrimaryService(NUS)).getCharacteristic(NUS_TX);
+    await ch.startNotifications();
+    resetStream();
+    const dec = new TextDecoder(); let buf = '';
+    ch.addEventListener('characteristicvaluechanged', e => {
+      buf += dec.decode(e.target.value);
+      let nl;
+      while ((nl = buf.indexOf('\n')) >= 0) {
+        const ln = buf.slice(0, nl); buf = buf.slice(nl + 1);
+        try { feedLine(ln); } catch (err) { }
+      }
+    });
+    btTries = 0;
+    status('connected — throw!');
+  }
+
+  async function retryConnect() {
+    if (!btWanted || !btDevice || btDevice.gatt.connected) return;
+    btTries++;
+    status('⚡ board reset — reconnecting (try ' + btTries + ')…');
+    try { await subscribe(btDevice); }
+    catch (e) {
+      // keep trying: the board takes a moment to re-advertise after a reboot
+      if (btWanted && btTries < 40) setTimeout(retryConnect, 1500);
+      else status('lost connection — press Connect micro:bit');
+    }
+  }
+
+  function onBtDrop() {
+    if (!btWanted) { status('disconnected'); return; }
+    status('⚡ board reset — reconnecting…');
+    setTimeout(retryConnect, 1200);      // give the micro:bit time to reboot + advertise
+  }
+
   $('connectBt').addEventListener('click', async () => {
     if (!navigator.bluetooth) { alert('Use Chrome or Edge for Bluetooth.'); return; }
     try {
-      const dev = await navigator.bluetooth.requestDevice({ filters: [{ namePrefix: 'BBC micro:bit' }], optionalServices: [NUS] });
-      const ch = await (await (await dev.gatt.connect()).getPrimaryService(NUS)).getCharacteristic(NUS_TX);
-      await ch.startNotifications(); resetStream(); status('connected (Bluetooth) — throw!');
-      const dec = new TextDecoder(); let buf = '';
-      ch.addEventListener('characteristicvaluechanged', e => {
-        buf += dec.decode(e.target.value);
-        let nl; while ((nl = buf.indexOf('\n')) >= 0) { const ln = buf.slice(0, nl); buf = buf.slice(nl + 1); try { feedLine(ln); } catch (e) { } }
-      });
-    } catch (e) { if (e.name !== 'NotFoundError') status('bluetooth error'); }
+      const dev = await navigator.bluetooth.requestDevice(
+        { filters: [{ namePrefix: 'BBC micro:bit' }], optionalServices: [NUS] });
+      if (btDevice) { try { btDevice.removeEventListener('gattserverdisconnected', onBtDrop); } catch (e) { } }
+      btDevice = dev; btWanted = true; btTries = 0;
+      dev.addEventListener('gattserverdisconnected', onBtDrop);
+      status('connecting…');
+      await subscribe(dev);
+    } catch (e) {
+      if (e.name !== 'NotFoundError') status('bluetooth error: ' + (e.message || e));
+    }
   });
 
   render();
